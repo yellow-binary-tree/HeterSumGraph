@@ -33,9 +33,11 @@ class sentEncoder(nn.Module):
         embed_size = hps.word_emb_dim
 
         input_channels = 1
-        out_channels = 50
+        # out_channels = 50
+        out_channels = 40
         min_kernel_size = 2
-        max_kernel_size = 7
+        max_kernel_size = 6
+        # max_kernel_size = 7
         width = embed_size
 
         # word embedding

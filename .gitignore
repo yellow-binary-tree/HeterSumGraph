@@ -4,6 +4,14 @@ checkpoints/*
 cache/*
 save/*
 log/*
+data/*
+
 
 # file
 *.pyc
+*.tar
+*.gz
+*.out
+*.log
+baidu*
+Tencent*

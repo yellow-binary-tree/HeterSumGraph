@@ -45,9 +45,10 @@ from tools.logger import *
 import dgl
 from dgl.data.utils import save_graphs, load_graphs
 
-FILTERWORD = stopwords.words('english')
+FILTERWORD = [line.strip() for line in open('baidu_stopwords.txt').readlines()]
 punctuations = [',', '.', ':', ';', '?', '(', ')', '[', ']', '&', '!', '*', '@', '#', '$', '%', '\'\'', '\'', '`', '``',
                 '-', '--', '|', '\/']
+punctuations.extend(['，', '。', '、', '【', '】', '《', '》', '？', '！', '“', '”', '‘', '’', '*', '—', '…'])
 FILTERWORD.extend(punctuations)
 
 
@@ -259,8 +260,9 @@ class ExampleSet(torch.utils.data.Dataset):
             # The two lines can be commented out if you use the code for your own training, since HSG does not use sent2sent edges. 
             # However, if you want to use the released checkpoint directly, please leave them here.
             # Otherwise it may cause some parameter corresponding errors due to the version differences.
-            G.add_edges(sent_nid, sentid2nid, data={"dtype": torch.ones(N)})
-            G.add_edges(sentid2nid, sent_nid, data={"dtype": torch.ones(N)})
+
+            # G.add_edges(sent_nid, sentid2nid, data={"dtype": torch.ones(N)})
+            # G.add_edges(sentid2nid, sent_nid, data={"dtype": torch.ones(N)})
         G.nodes[sentid2nid].data["words"] = torch.LongTensor(input_pad)  # [N, seq_len]
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
         G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
