@@ -36,8 +36,12 @@ from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
 from tools.logger import *
 
-_DEBUG_FLAG_ = False
+from tensorboardX import SummaryWriter
 
+nowTime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+writer = SummaryWriter(os.path.join('./tensorboard_log/', 'train_' + nowTime))
+
+_DEBUG_FLAG_ = False
 
 def save_model(model, save_file):
     with open(save_file, 'wb') as f:
@@ -102,17 +106,20 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
         epoch_loss = 0.0
         train_loss = 0.0
         epoch_start_time = time.time()
+        iters_elapsed = 0
         for i, (G, index) in enumerate(train_loader):
+            iters_elapsed += 1
             iter_start_time = time.time()
-            # if i > 10:
-            #     break
             model.train()
 
             if hps.cuda:
                 G.to(torch.device("cuda"))
 
             outputs = model.forward(G)  # [n_snodes, 2]
-            snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            if hps.model == 'HSG':
+                snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            elif hps.model == 'HDSG':
+                snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1 and nodes.data["extractable"] == 1)
             label = G.ndata["label"][snode_id].sum(-1)  # [n_nodes]
             G.nodes[snode_id].data["loss"] = criterion(outputs, label).unsqueeze(-1)  # [n_nodes, 1]
             loss = dgl.sum_nodes(G, "loss")  # [batch_size, 1]
@@ -137,15 +144,24 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             train_loss += float(loss.data)
             epoch_loss += float(loss.data)
 
-            if i % 100 == 0:
+            if iters_elapsed % 50 == 0:
                 if _DEBUG_FLAG_:
                     for name, param in model.named_parameters():
                         if param.requires_grad:
                             logger.debug(name)
                             logger.debug(param.grad.data.sum())
                 logger.info('       | end of iter {:3d} | time: {:5.2f}s | train loss {:5.4f} | '
-                                .format(i, (time.time() - iter_start_time),float(train_loss / 100)))
+                                .format(iters_elapsed, (time.time() - iter_start_time),float(train_loss / 100)))
+                writer.add_scalar('loss/train_loss', train_loss, iters_elapsed)
                 train_loss = 0.0
+
+            if iters_elapsed % hps.eval_after_iterations == 0:
+                save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
+                best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed)
+                if non_descent_cnt >= 3:
+                    logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
+                    save_model(model, os.path.join(train_dir, "earlystop"))
+                    return
 
         if hps.lr_descent:
             new_lr = max(5e-6, hps.lr / (epoch + 1))
@@ -168,15 +184,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             save_model(model, os.path.join(train_dir, "earlystop"))
             sys.exit(1)
 
-        best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo)
-
-        if non_descent_cnt >= 3:
-            logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
-            save_model(model, os.path.join(train_dir, "earlystop"))
-            return
-
-
-def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo):
+def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed):
     ''' 
         Repeatedly runs eval iterations, logging to screen and writing summaries. Saves the model with the best loss seen so far.
         :param model: the model
@@ -220,6 +228,16 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
           + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
     scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
     logger.info(res)
+
+    writer.add_scalar('eval_rouge/1_p', scores_all['rouge-1']['p'], iters_elapsed)
+    writer.add_scalar('eval_rouge/1_r', scores_all['rouge-1']['r'], iters_elapsed)
+    writer.add_scalar('eval_rouge/1_f', scores_all['rouge-1']['f'], iters_elapsed)
+    writer.add_scalar('eval_rouge/2_p', scores_all['rouge-2']['p'], iters_elapsed)
+    writer.add_scalar('eval_rouge/2_r', scores_all['rouge-2']['r'], iters_elapsed)
+    writer.add_scalar('eval_rouge/2_f', scores_all['rouge-2']['f'], iters_elapsed)
+    writer.add_scalar('eval_rouge/l_p', scores_all['rouge-l']['p'], iters_elapsed)
+    writer.add_scalar('eval_rouge/l_r', scores_all['rouge-l']['r'], iters_elapsed)
+    writer.add_scalar('eval_rouge/l_f', scores_all['rouge-l']['f'], iters_elapsed)
 
     tester.getMetric()
     F = tester.labelMetric
@@ -300,6 +318,7 @@ def main():
     parser.add_argument('--use_orthnormal_init', action='store_true', default=True,help='use orthnormal init for lstm [default: True]')
     parser.add_argument('--sent_max_len', type=int, default=100,help='max length of sentences (max source text sentence tokens)')
     parser.add_argument('--doc_max_timesteps', type=int, default=50,help='max length of documents (max timesteps of documents)')
+    parser.add_argument('--eval_after_iterations', type=int, default=3000, help='perform eval after n iterations of training')
 
     # Training
     parser.add_argument('--lr', type=float, default=0.0005, help='learning rate')
@@ -321,11 +340,9 @@ def main():
     FILTER_WORD = os.path.join(args.cache_dir, "filter_word.txt")
     LOG_PATH = args.log_root
 
-
     # train_log setting
     if not os.path.exists(LOG_PATH):
         os.makedirs(LOG_PATH)
-    nowTime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     log_path = os.path.join(LOG_PATH, "train_" + nowTime)
     file_handler = logging.FileHandler(log_path)
     file_handler.setFormatter(formatter)
@@ -352,7 +369,7 @@ def main():
         model = HSumGraph(hps, embed)
         logger.info("[MODEL] HeterSumGraph ")
         dataset = ExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path)
-        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=graph_collate_fn)
+        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=graph_collate_fn)
         del dataset
         valid_dataset = ExampleSet(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path)
         valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.num_workers)
@@ -361,11 +378,11 @@ def main():
         logger.info("[MODEL] HeterDocSumGraph ")
         train_w2d_path = os.path.join(args.cache_dir, "train.w2d.tfidf.jsonl")
         dataset = MultiExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path, train_w2d_path)
-        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=graph_collate_fn)
+        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=graph_collate_fn)
         del dataset
         val_w2d_path = os.path.join(args.cache_dir, "val.w2d.tfidf.jsonl")
         valid_dataset = MultiExampleSet(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path, val_w2d_path)
-        valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False,collate_fn=graph_collate_fn, num_workers=args.num_workers)  # Shuffle Must be False for ROUGE evaluation
+        valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.num_workers)  # Shuffle Must be False for ROUGE evaluation
     else:
         logger.error("[ERROR] Invalid Model Type!")
         raise NotImplementedError("Model Type has not been implemented")

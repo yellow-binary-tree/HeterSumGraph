@@ -62,9 +62,13 @@ def main():
     saveFile = os.path.join(save_dir, fname)
     print("Save word2sent features of dataset %s to %s" % (args.dataset, saveFile))
 
+    cnt = 0
     fout = open(saveFile, "w")
     with open(args.data_path) as f:
         for line in f:
+            cnt += 1
+            if cnt % 100 == 0:
+                print('processed chaps: %d' % cnt)
             e = json.loads(line)
             if isinstance(e["text"], list) and isinstance(e["text"][0], list):
                 sents = catDoc(e["text"])
@@ -77,7 +81,5 @@ def main():
             tfidfvector = compress_array(tfidf_weight, id2word)
             fout.write(json.dumps(tfidfvector) + "\n")
 
-
 if __name__ == '__main__':
     main()
-        

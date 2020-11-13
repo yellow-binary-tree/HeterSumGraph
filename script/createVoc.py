@@ -42,6 +42,13 @@ def PrintInformation(keys, allcnt):
             first += v
         print("First 100,000 percent: %f, last freq %d" % (first / allcnt, keys[100000][1]))
 
+def add_vocab(vocab, fdist):
+    keys = fdist1.most_common()
+    for key, val in keys:
+        if key not in vocab.keys():
+            vocab[key] = 0
+        vocab[key] += val
+    return vocab
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -56,29 +63,39 @@ if __name__ == '__main__':
     saveFile = os.path.join(save_dir, "vocab")
     print("Save vocab of dataset %s to %s" % (args.dataset, saveFile))
 
-    text = []
-    summary = []
-    allword = []
     cnt = 0
-    with open(args.data_path, encoding='utf8') as f:
-        for line in f:
-            e = json.loads(line)
-            if isinstance(e["text"], list) and isinstance(e["text"][0], list):
-                sents = catDoc(e["text"])
-            else:
-                sents = e["text"]
-            text = " ".join(sents)
-            summary = " ".join(e["summary"])
-            allword.extend(text.split())
-            allword.extend(summary.split())
-            cnt += 1
+    vocab = {}
+
+    if os.path.isdir(args.data_path):
+        filenames = [os.path.join(args.data_path, i) for i in os.listdir(args.data_path)]
+    else:
+        filenames = [args.data_path]
+    print('training data filenames:', filenames)
+
+    for filename in filenames:
+        allword = []
+        with open(filename, encoding='utf8') as f:
+            for line in f:
+                e = json.loads(line)
+                if isinstance(e["text"], list) and isinstance(e["text"][0], list):
+                    sents = catDoc(e["text"])
+                else:
+                    sents = e["text"]
+                text = " ".join(sents)
+                summary = " ".join(e["summary"])
+                allword.extend(text.split())
+                allword.extend(summary.split())
+                cnt += 1
+
+        print('stated: %d' % cnt)
+        fdist1 = nltk.FreqDist(allword)
+        vocab = add_vocab(vocab, fdist1)
+
     print("Training set of dataset has %d example" % cnt)
 
-    fdist1 = nltk.FreqDist(allword)
-
+    vocab_tuple = sorted(vocab.items(), key=lambda x: x[1], reverse=True)
     fout = open(saveFile, "w")
-    keys = fdist1.most_common()
-    for key, val in keys:
+    for key, val in vocab_tuple:
         try:
             fout.write("%s\t%d\n" % (key, val))
         except UnicodeEncodeError as e:
@@ -88,8 +105,8 @@ if __name__ == '__main__':
 
     fout.close()
 
-    allcnt = fdist1.N() # 788,159,121
-    allset = fdist1.B() # 5,153,669
+    allcnt = sum([i[1] for i in vocab_tuple]) # 788,159,121
+    allset = len(vocab_tuple)
     print("All appearance %d, unique word %d" % (allcnt, allset))
 
-    PrintInformation(keys, allcnt)
+    # PrintInformation(keys, allcnt)

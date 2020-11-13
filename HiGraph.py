@@ -142,7 +142,7 @@ class HSumGraph(nn.Module):
         return lstm_feature
 
     def set_wnfeature(self, graph):
-        wnode_id = graph.filter_nodes(lambda nodes: nodes.data["unit"]==0)
+        wnode_id = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 0)
         wsedge_id = graph.filter_edges(lambda edges: edges.data["dtype"] == 0)   # for word to supernode(sent&doc)
         wid = graph.nodes[wnode_id].data["id"]  # [n_wnodes]
         w_embed = self._embed(wid)  # [n_wnodes, D]
@@ -216,8 +216,9 @@ class HSumDocGraph(HSumGraph):
         graph.nodes[supernode_id].data["hidden_state"] = sent_state
 
         # extract sentence nodes
+        extractable_snode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1 and nodes.data["extractable"] == 1)
         s_state_list = []
-        for snid in snode_id:
+        for snid in extractable_snode_id:
             d_state = graph.nodes[snid2dnid[int(snid)]].data["hidden_state"]
             s_state = graph.nodes[snid].data["hidden_state"]
             s_state = torch.cat([s_state, d_state], dim=-1)

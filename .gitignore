@@ -5,7 +5,7 @@ cache/*
 save/*
 log/*
 data/*
-
+tensorboard_log/*
 
 # file
 *.pyc

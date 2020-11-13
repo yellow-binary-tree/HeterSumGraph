@@ -6,9 +6,9 @@ def move_training_data(src_folder, dest_folder):
     types = ['train', 'val', 'test']
     for t in types:
         books = os.listdir(os.path.join(src_folder, t))
-        f = open(os.path.join(dest_folder, t+'.label.jsonl'), 'w')
+        f = open(os.path.join(dest_folder, t+'.label.jsonl'), 'w', encoding='utf-8')
         for book in books:
-            lines = open(os.path.join(src_folder, t, book)).read().strip()
+            lines = open(os.path.join(src_folder, t, book), encoding='utf-8').read().strip()
             f.write(lines + '\n')
 
 if __name__ == '__main__':

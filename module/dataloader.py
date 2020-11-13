@@ -45,10 +45,10 @@ from tools.logger import *
 import dgl
 from dgl.data.utils import save_graphs, load_graphs
 
-FILTERWORD = [line.strip() for line in open('baidu_stopwords.txt').readlines()]
+FILTERWORD = [line.strip() for line in open('baidu_stopwords.txt', encoding='utf-8').readlines()]
 punctuations = [',', '.', ':', ';', '?', '(', ')', '[', ']', '&', '!', '*', '@', '#', '$', '%', '\'\'', '\'', '`', '``',
                 '-', '--', '|', '\/']
-punctuations.extend(['，', '。', '、', '【', '】', '《', '》', '？', '！', '“', '”', '‘', '’', '*', '—', '…'])
+punctuations.extend(['，', '。', '、', '【', '】', '《', '》', '？', '！', '“', '”', '‘', '’', '*', '—', '…', ' ', '\r', '\n', '\t'])
 FILTERWORD.extend(punctuations)
 
 
@@ -113,11 +113,12 @@ class Example(object):
 class Example2(Example):
     """Class representing a train/val/test example for multi-document extractive summarization."""
 
-    def __init__(self, article_sents, abstract_sents, vocab, sent_max_len, label):
+    def __init__(self, article_sents, abstract_sents, extractable_labels, vocab, sent_max_len, label):
         """ Initializes the Example, performing tokenization and truncation to produce the encoder, decoder and target sequences, which are stored in self.
 
         :param article_sents: list(list(string)) for multi-document; one per article sentence. each token is separated by a single space.
         :param abstract_sents: list(strings); one per abstract sentence. In each sentence, each token is separated by a single space.
+        :param extractable_labels: list(int); one int(0/1) per article sentence. 1 if the sentence can be extracted and 0 if the sentence can not.
         :param vocab: Vocabulary object
         :param sent_max_len: int, max length of each sentence
         :param label: list, the No of selected sentence, e.g. [1,3,5]
@@ -128,6 +129,7 @@ class Example2(Example):
         self.original_articles = []
         self.article_len = []
         self.enc_doc_input = []
+        self.extractable_labels = extractable_labels
         for doc in article_sents:
             if len(doc) == 0:
                 continue
@@ -140,7 +142,7 @@ class Example2(Example):
 
 ######################################### ExampleSet #########################################
 
-class ExampleSet(torch.utils.data.Dataset):
+class ExampleSet(torch.utils.data.IterableDataset):
     """ Constructor: Dataset of example(object) for single document summarization"""
 
     def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path):
@@ -159,11 +161,15 @@ class ExampleSet(torch.utils.data.Dataset):
         self.doc_max_timesteps = doc_max_timesteps
 
         logger.info("[INFO] Start reading %s", self.__class__.__name__)
-        start = time.time()
-        self.example_list = readJson(data_path)
-        logger.info("[INFO] Finish reading %s. Total time is %f, Total size is %d", self.__class__.__name__,
-                    time.time() - start, len(self.example_list))
-        self.size = len(self.example_list)
+        self.size = 0
+
+        f = open(data_path, encoding='utf-8')
+        for line in f:
+            self.size += 1
+        f.close()
+
+        self.data_fd = open(data_path, encoding='utf-8')
+        logger.info("[INFO] Finish reading %s. Total size is %d", self.__class__.__name__, self.size)
 
         logger.info("[INFO] Loading filter word File %s", filter_word_path)
         tfidf_w = readText(filter_word_path)
@@ -183,10 +189,18 @@ class ExampleSet(torch.utils.data.Dataset):
                 break
 
         logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
-        self.w2s_tfidf = readJson(w2s_path)
+        self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
+
+    def get_w2s_tfidf(self, index):
+        return json.loads(self.w2s_tfidf_fd.readline().strip())
 
     def get_example(self, index):
-        e = self.example_list[index]
+        try:
+            e_text = self.data_fd.__next__()
+        except StopIteration as si:
+            e_text = '[]'
+        print(e_text)
+        e = json.loads(e_text)
         e["summary"] = e.setdefault("summary", [])
         example = Example(e["text"], e["summary"], self.vocab, self.sent_max_len, e["label"])
         return example
@@ -277,11 +291,14 @@ class ExampleSet(torch.utils.data.Dataset):
             index: int; the index of the example in the dataset
         """
         item = self.get_example(index)
+        w2s_w = self.get_w2s_tfidf(index)
         input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
         label = self.pad_label_m(item.label_matrix)
-        w2s_w = self.w2s_tfidf[index]
         G = self.CreateGraph(input_pad, label, w2s_w)
-
+        # print('[WYQDEBUG]')
+        # print(item.original_article_sents)
+        # print(item.original_abstract)
+        # print(G.edges())
         return G, index
 
     def __len__(self):
@@ -305,12 +322,15 @@ class MultiExampleSet(ExampleSet):
         super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path)
 
         logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
-        self.w2d_tfidf = readJson(w2d_path)
+        self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+
+    def get_w2d_tfidf(self, index):
+        return json.loads(self.w2d_tfidf_fd.readline())
 
     def get_example(self, index):
-        e = self.example_list[index]
+        e = json.loads(self.data_fd.readline())
         e["summary"] = e.setdefault("summary", [])
-        example = Example2(e["text"], e["summary"], self.vocab, self.sent_max_len, e["label"])
+        example = Example2(e["text"], e["summary"], e["extractable"], self.vocab, self.sent_max_len, e["label"])
         return example
 
     def MapSent2Doc(self, article_len, sentNum):
@@ -327,13 +347,14 @@ class MultiExampleSet(ExampleSet):
                     return sent2doc
         return sent2doc
 
-    def CreateGraph(self, docLen, sent_pad, doc_pad, label, w2s_w, w2d_w):
+    def CreateGraph(self, docLen, sent_pad, doc_pad, label, extractable_labels, w2s_w, w2d_w):
         """ Create a graph for each document
 
         :param docLen: list; the length of each document in this example
         :param sent_pad: list(list), [sentnum, wordnum]
         :param doc_pad: list, [document, wordnum]
         :param label: list(list), [sentnum, sentnum]
+        :param extractable_labels: list(0/1), [sentnum] whether the sentence can be extracted
         :param w2s_w: dict(dict) {str: {str: float}}, for each sentence and each word, the tfidf between them
         :param w2d_w: dict(dict) {str: {str: float}}, for each document and each word, the tfidf between them
         :return: G: dgl.DGLGraph
@@ -404,6 +425,7 @@ class MultiExampleSet(ExampleSet):
         G.nodes[sentid2nid].data["words"] = torch.LongTensor(sent_pad)  # [N, seq_len]
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
         G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
+        G.nodes[sentid2nid].data["extractable"] = torch.LongTensor(extractable_labels).view(-1, 1) # [N, 1]
 
         return G
 
@@ -415,13 +437,14 @@ class MultiExampleSet(ExampleSet):
             index: int; the index of the example in the dataset
         """
         item = self.get_example(index)
+        w2s_w = self.get_w2s_tfidf(index)
+        w2d_w = self.get_w2d_tfidf(index)
         sent_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
+        extractable_labels = item.extractable_labels[:self.doc_max_timesteps]
         enc_doc_input = item.enc_doc_input
         article_len = item.article_len
         label = self.pad_label_m(item.label_matrix)
-
-        G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, self.w2s_tfidf[index], self.w2d_tfidf[index])
-
+        G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, extractable_labels, w2s_w, w2d_w)
         return G, index
 
 

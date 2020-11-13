@@ -26,7 +26,7 @@ fi
 type=(train val test)
 
 echo -e "\033[34m[Shell] Create Vocabulary! \033[0m"
-python script/createVoc.py \
+python -u script/createVoc.py \
     --dataset $dataset \
     --data_path $datadir/train.label.jsonl
 
@@ -56,3 +56,5 @@ fi
 echo -e "\033[34m[Shell] The preprocess of dataset $dataset has finished! \033[0m"
 
 
+# nohup python -u script/calw2sTFIDF.py --dataset qidian_1109_seq --data_path data/qidian_1109_seq/test.label.jsonl  > multi_process_test.log 2>&1 &
+# nohup python -u script/calw2sTFIDF.py --dataset qidian_1109_seq --data_path data/qidian_1109_seq/val.label.jsonl > multi_process_val.log 2>&1 &
