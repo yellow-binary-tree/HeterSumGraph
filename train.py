@@ -76,6 +76,10 @@ def setup_training(model, train_loader, valid_loader, valset, hps):
     except KeyboardInterrupt:
         logger.error("[Error] Caught keyboard interrupt on worker. Stopping supervisor...")
         save_model(model, os.path.join(train_dir, "earlystop"))
+    except Exception as err:
+        save_model(model, os.path.join(train_dir, "exception"))
+        logger.error("[Error] training ended with error")
+        raise err
 
 
 def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
@@ -101,12 +105,12 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
     best_F = None
     non_descent_cnt = 0
     saveNo = 0
+    iters_elapsed = 0
 
     for epoch in range(1, hps.n_epochs + 1):
         epoch_loss = 0.0
         train_loss = 0.0
         epoch_start_time = time.time()
-        iters_elapsed = 0
         for i, (G, index) in enumerate(train_loader):
             iters_elapsed += 1
             iter_start_time = time.time()
@@ -116,10 +120,11 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                 G.to(torch.device("cuda"))
 
             outputs = model.forward(G)  # [n_snodes, 2]
-            if hps.model == 'HSG':
-                snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-            elif hps.model == 'HDSG':
-                snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1 and nodes.data["extractable"] == 1)
+
+            snode_id = G.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
+            if hps.model == 'HDSG':
+                snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
+
             label = G.ndata["label"][snode_id].sum(-1)  # [n_nodes]
             G.nodes[snode_id].data["loss"] = criterion(outputs, label).unsqueeze(-1)  # [n_nodes, 1]
             loss = dgl.sum_nodes(G, "loss")  # [batch_size, 1]
@@ -144,7 +149,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             train_loss += float(loss.data)
             epoch_loss += float(loss.data)
 
-            if iters_elapsed % 50 == 0:
+            if iters_elapsed % 25 == 0:
                 if _DEBUG_FLAG_:
                     for name, param in model.named_parameters():
                         if param.requires_grad:
@@ -206,7 +211,7 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
     iter_start_time = time.time()
 
     with torch.no_grad():
-        tester = SLTester(model, hps.m)
+        tester = SLTester(model, hps)
         for i, (G, index) in enumerate(loader):
             if hps.cuda:
                 G.to(torch.device("cuda"))
@@ -368,20 +373,20 @@ def main():
     if hps.model == "HSG":
         model = HSumGraph(hps, embed)
         logger.info("[MODEL] HeterSumGraph ")
-        dataset = ExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path)
+        dataset = ExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path, data_mode='train')
         train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=graph_collate_fn)
         del dataset
-        valid_dataset = ExampleSet(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path)
+        valid_dataset = ExampleSet(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path, data_mode='valid')
         valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.num_workers)
     elif hps.model == "HDSG":
         model = HSumDocGraph(hps, embed)
         logger.info("[MODEL] HeterDocSumGraph ")
         train_w2d_path = os.path.join(args.cache_dir, "train.w2d.tfidf.jsonl")
-        dataset = MultiExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path, train_w2d_path)
+        dataset = MultiExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path, train_w2d_path, data_mode='train')
         train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=graph_collate_fn)
         del dataset
         val_w2d_path = os.path.join(args.cache_dir, "val.w2d.tfidf.jsonl")
-        valid_dataset = MultiExampleSet(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path, val_w2d_path)
+        valid_dataset = MultiExampleSet(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path, val_w2d_path, data_mode='valid')
         valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.num_workers)  # Shuffle Must be False for ROUGE evaluation
     else:
         logger.error("[ERROR] Invalid Model Type!")

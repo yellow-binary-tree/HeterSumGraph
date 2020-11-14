@@ -31,6 +31,8 @@ from module.Encoder import sentEncoder
 from module.GAT import WSWGAT
 from module.PositionEmbedding import get_sinusoid_encoding_table
 
+from tools.logger import *
+
 class HSumGraph(nn.Module):
     """ without sent2sent and add residual connection """
     def __init__(self, hps, embed):
@@ -216,7 +218,16 @@ class HSumDocGraph(HSumGraph):
         graph.nodes[supernode_id].data["hidden_state"] = sent_state
 
         # extract sentence nodes
-        extractable_snode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1 and nodes.data["extractable"] == 1)
+        def nodes_for_extractable_sentence(nodes):
+            node_features = (nodes.data['dtype'] == 1).squeeze(1)
+            print(node_features, node_features.size())
+            node_features = node_features + (nodes.data['extractable'] == 1).squeeze(1)
+            print(node_features, node_features.size())
+            return (node_features == 2)
+
+        extractable_snode_id = graph.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
+        extractable_snode_id = graph.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=extractable_snode_id)
+
         s_state_list = []
         for snid in extractable_snode_id:
             d_state = graph.nodes[snid2dnid[int(snid)]].data["hidden_state"]
@@ -234,13 +245,22 @@ class HSumDocGraph(HSumGraph):
         dnode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 2)
         node_feature_list = []
         snid2dnid = {}
-        for dnode in dnode_id:
+        for i, dnode in enumerate(dnode_id):
             snodes = [nid for nid in graph.predecessors(dnode) if graph.nodes[nid].data["dtype"]==1]
             doc_feature = graph.nodes[snodes].data["init_feature"].mean(dim=0)
-            assert not torch.any(torch.isnan(doc_feature)), "doc_feature_element"
+            try:
+                assert not torch.any(torch.isnan(doc_feature)), "doc_feature_element"
+            except AssertionError as ae:
+                # if doc feature is nan, init as 0
+                logger.error('So init node_feature %d to 0.' % i)
+                doc_feature.zero_()
+                logger.error('in except: doc_feature.device = %s, dnode = ' % str(doc_feature.device))
+                print(dnode)
+
             node_feature_list.append(doc_feature)
             for s in snodes:
                 snid2dnid[int(s)] = dnode
+
         node_feature = torch.stack(node_feature_list)
         return node_feature, snid2dnid
 

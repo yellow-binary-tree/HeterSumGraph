@@ -6,18 +6,19 @@ from tools.utils import eval_label
 from tools.logger import *
 
 class TestPipLine():
-    def __init__(self, model, m, test_dir, limited):
+    def __init__(self, model, hps, test_dir, limited):
         """
             :param model: the model
-            :param m: the number of sentence to select
+            :param hps: params
             :param test_dir: for saving decode files
             :param limited: for limited Recall evaluation
         """
         self.model = model
         self.limited = limited
-        self.m = m
+        self.m = hps.m
         self.test_dir = test_dir
         self.extracts = []
+        self.hps = hps
 
         self.batch_number = 0
         self.running_loss = 0
@@ -78,8 +79,8 @@ class TestPipLine():
 
     
 class SLTester(TestPipLine):
-    def __init__(self, model, m, test_dir=None, limited=False, blocking_win=3):
-        super().__init__(model, m, test_dir, limited)
+    def __init__(self, model, hps, test_dir=None, limited=False, blocking_win=3):
+        super().__init__(model, hps, test_dir, limited)
         self.pred, self.true, self.match, self.match_true = 0, 0, 0, 0
         self._F = 0
         self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
@@ -95,7 +96,11 @@ class SLTester(TestPipLine):
         self.batch_number += 1
         outputs = self.model.forward(G)
         # logger.debug(outputs)
+
         snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+        if self.hps.model == 'HDSG':
+            snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
+
         label = G.ndata["label"][snode_id].sum(-1)            # [n_nodes]
         G.nodes[snode_id].data["loss"] = self.criterion(outputs, label).unsqueeze(-1)    # [n_nodes, 1]
         loss = dgl.sum_nodes(G, "loss")    # [batch_size, 1]

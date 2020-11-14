@@ -67,7 +67,7 @@ if __name__ == '__main__':
     vocab = {}
 
     if os.path.isdir(args.data_path):
-        filenames = [os.path.join(args.data_path, i) for i in os.listdir(args.data_path)]
+        filenames = [os.path.join(args.data_path, i) for i in os.listdir(args.data_path) if os.path.isfile(os.path.join(args.data_path, i))]
     else:
         filenames = [args.data_path]
     print('training data filenames:', filenames)

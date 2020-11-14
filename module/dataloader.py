@@ -142,10 +142,10 @@ class Example2(Example):
 
 ######################################### ExampleSet #########################################
 
-class ExampleSet(torch.utils.data.IterableDataset):
+class ExampleSet(torch.utils.data.Dataset):
     """ Constructor: Dataset of example(object) for single document summarization"""
 
-    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path):
+    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, data_mode='train'):
         """ Initializes the ExampleSet with the path of data
         
         :param data_path: string; the path of data
@@ -159,17 +159,31 @@ class ExampleSet(torch.utils.data.IterableDataset):
         self.vocab = vocab
         self.sent_max_len = sent_max_len
         self.doc_max_timesteps = doc_max_timesteps
+        self.data_mode = data_mode
+        self.examples_fetched = 0
 
-        logger.info("[INFO] Start reading %s", self.__class__.__name__)
-        self.size = 0
+        if self.data_mode == 'train':
+            logger.info("[INFO] Start reading %s", self.__class__.__name__)
+            self.size = 0
+            f = open(data_path, encoding='utf-8')
+            for line in f:
+                self.size += 1
+            f.close()
+            self.data_fd = open(data_path, encoding='utf-8')
+            logger.info("[INFO] Finish reading %s. Total size is %d", self.__class__.__name__, self.size)
 
-        f = open(data_path, encoding='utf-8')
-        for line in f:
-            self.size += 1
-        f.close()
+            logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
+            self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
+        else:
+            logger.info("[INFO] Start reading %s", self.__class__.__name__)
+            start = time.time()
+            self.example_list = readJson(data_path)
+            logger.info("[INFO] Finish reading %s. Total time is %f, Total size is %d", self.__class__.__name__,
+                        time.time() - start, len(self.example_list))
+            self.size = len(self.example_list)
 
-        self.data_fd = open(data_path, encoding='utf-8')
-        logger.info("[INFO] Finish reading %s. Total size is %d", self.__class__.__name__, self.size)
+            logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
+            self.w2s_tfidf = readJson(w2s_path)
 
         logger.info("[INFO] Loading filter word File %s", filter_word_path)
         tfidf_w = readText(filter_word_path)
@@ -188,19 +202,18 @@ class ExampleSet(torch.utils.data.IterableDataset):
             if lowtfidf_num > 5000:
                 break
 
-        logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
-        self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
-
     def get_w2s_tfidf(self, index):
-        return json.loads(self.w2s_tfidf_fd.readline().strip())
+        if self.data_mode == 'train':
+            return json.loads(self.w2s_tfidf_fd.readline().strip())
+        else:
+            return self.w2s_tfidf[index]
 
     def get_example(self, index):
-        try:
-            e_text = self.data_fd.__next__()
-        except StopIteration as si:
-            e_text = '[]'
-        print(e_text)
-        e = json.loads(e_text)
+        if self.data_mode == 'train':
+            e_text = self.data_fd.readline()
+            e = json.loads(e_text)
+        else:
+            e = self.example_list[index]
         e["summary"] = e.setdefault("summary", [])
         example = Example(e["text"], e["summary"], self.vocab, self.sent_max_len, e["label"])
         return example
@@ -295,10 +308,16 @@ class ExampleSet(torch.utils.data.IterableDataset):
         input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
         label = self.pad_label_m(item.label_matrix)
         G = self.CreateGraph(input_pad, label, w2s_w)
-        # print('[WYQDEBUG]')
-        # print(item.original_article_sents)
-        # print(item.original_abstract)
-        # print(G.edges())
+
+        self.examples_fetched += 1
+        if self.examples_fetched == self.size and self.data_mode == 'train':
+            # reload all the files
+            self.data_fd.close()
+            self.w2s_tfidf_fd.close()
+            self.data_fd = open(data_path, encoding='utf-8')
+            self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
+            self.examples_fetched = 0
+
         return G, index
 
     def __len__(self):
@@ -307,7 +326,7 @@ class ExampleSet(torch.utils.data.IterableDataset):
 
 class MultiExampleSet(ExampleSet):
     """ Constructor: Dataset of example(object) for multiple document summarization"""
-    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, w2d_path):
+    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, w2d_path, data_mode='train'):
         """ Initializes the ExampleSet with the path of data
 
         :param data_path: string; the path of data
@@ -319,16 +338,27 @@ class MultiExampleSet(ExampleSet):
         :param w2d_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2dTFIDF.py)
         """
 
-        super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path)
+        super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, data_mode)
 
-        logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
-        self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+        if self.data_mode == 'train':
+            logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
+            self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+        else:
+            logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
+            self.w2d_tfidf = readJson(w2d_path)
 
     def get_w2d_tfidf(self, index):
-        return json.loads(self.w2d_tfidf_fd.readline())
+        if self.data_mode == 'train':
+            return json.loads(self.w2d_tfidf_fd.readline())
+        else:
+            return self.w2d_tfidf[index]
 
     def get_example(self, index):
-        e = json.loads(self.data_fd.readline())
+        if self.data_mode == 'train':
+            e_text = self.data_fd.readline()
+            e = json.loads(e_text)
+        else:
+            e = self.example_list[index]
         e["summary"] = e.setdefault("summary", [])
         example = Example2(e["text"], e["summary"], e["extractable"], self.vocab, self.sent_max_len, e["label"])
         return example
@@ -445,6 +475,17 @@ class MultiExampleSet(ExampleSet):
         article_len = item.article_len
         label = self.pad_label_m(item.label_matrix)
         G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, extractable_labels, w2s_w, w2d_w)
+
+        self.examples_fetched += 1
+        if self.examples_fetched == self.size and self.data_mode == 'train':
+            # reload all the files
+            self.data_fd.close()
+            self.w2s_tfidf_fd.close()
+            self.w2d_tfidf_fd.close()
+            self.data_fd = open(data_path, encoding='utf-8')
+            self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
+            self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+            self.examples_fetched = 0
         return G, index
 
 
