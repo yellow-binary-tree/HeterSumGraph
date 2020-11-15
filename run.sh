@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash run.sh debug HDSG qidian_1109_seq 7 > HDSG_1114_debug.log 2>&1 &
+# nohup bash run.sh debug HDSG qidian_sample_seq 7 > HDSG_1114_debug.log 2>&1 &
 
 mode=$1
 model=$2
@@ -60,3 +60,5 @@ elif [ $mode == 'run' ]; then
 else
     echo 'please select a run mode: debug / run'
 fi
+
+exit

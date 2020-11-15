@@ -156,6 +156,8 @@ class ExampleSet(torch.utils.data.Dataset):
         :param w2s_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2sTFIDF.py)
         """
 
+        self.data_path = data_path
+        self.w2s_path = w2s_path
         self.vocab = vocab
         self.sent_max_len = sent_max_len
         self.doc_max_timesteps = doc_max_timesteps
@@ -314,8 +316,8 @@ class ExampleSet(torch.utils.data.Dataset):
             # reload all the files
             self.data_fd.close()
             self.w2s_tfidf_fd.close()
-            self.data_fd = open(data_path, encoding='utf-8')
-            self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
+            self.data_fd = open(self.data_path, encoding='utf-8')
+            self.w2s_tfidf_fd = open(self.w2s_path, encoding='utf-8')
             self.examples_fetched = 0
 
         return G, index
@@ -339,6 +341,7 @@ class MultiExampleSet(ExampleSet):
         """
 
         super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, data_mode)
+        self.w2d_path = w2d_path
 
         if self.data_mode == 'train':
             logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
@@ -482,9 +485,9 @@ class MultiExampleSet(ExampleSet):
             self.data_fd.close()
             self.w2s_tfidf_fd.close()
             self.w2d_tfidf_fd.close()
-            self.data_fd = open(data_path, encoding='utf-8')
-            self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
-            self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+            self.data_fd = open(self.data_path, encoding='utf-8')
+            self.w2s_tfidf_fd = open(self.w2s_path, encoding='utf-8')
+            self.w2d_tfidf_fd = open(self.w2d_path, encoding='utf-8')
             self.examples_fetched = 0
         return G, index
 

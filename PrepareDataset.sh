@@ -79,7 +79,12 @@ python -u script/combineFile.py \
 echo -e "\033[34m[Shell] The preprocess of dataset $dataset has finished! \033[0m"
 
 # run the script like:
-# nohup python -u script/calw2sTFIDF.py --dataset qidian_1109_seq --data_path data/qidian_1109_seq/test.label.jsonl  > multi_process_test.log 2>&1 &
+# nohup python -u script/calw2sTFIDF.py --dataset qidian_1109_seq_winsize3 --data_path data/qidian_1109_seq_winsize3/train_split > preprocess_winsize3_parallel2.log 2>&1 &
 # nohup python -u script/calw2sTFIDF.py --dataset qidian_1109_seq --data_path data/qidian_1109_seq/val.label.jsonl > multi_process_val.log 2>&1 &
 
 # nohup bash PrepareDataset.sh qidian_1109_seq_winsize3 data/qidian_1109_seq_winsize3 multi > preprocess_winsize3_parallel.log 2>&1 &
+
+
+# python script/combineFile.py \
+#     --input_folder cache/qidian_1109_seq_winsize3/train_split \
+#     --output_folder cache/qidian_1109_seq_winsize3

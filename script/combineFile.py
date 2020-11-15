@@ -7,7 +7,7 @@ def combine_file(input_folder, output_folder, output_filename, length):
         if i < 10:
             input_filename = os.path.join(input_folder, output_filename + '_0' + str(i))
         else:
-            input_filename = os.path.join(output_filename + '_' + str(i))
+            input_filename = os.path.join(input_folder, output_filename + '_' + str(i))
         fin = open(input_filename, encoding='utf-8')
         for line in fin:
             fout.write(line)
@@ -20,6 +20,10 @@ def main():
     parser.add_argument('--output_folder', type=str, default='cache/CNNDM', help='dataset name')
     args = parser.parse_args()
 
-    length = os.listdir(args.input_folder)
-    combine_file(args.input_folder, args.outsput_folder, 'train.w2s.tfidf.jsonl', length/2)
-    combine_file(args.input_folder, args.output_folder,'train.w2d.tfidf.jsonl', length/2)
+    length = len(os.listdir(args.input_folder))
+    print(length)
+    combine_file(args.input_folder, args.output_folder, 'train.w2s.tfidf.jsonl', length // 2)
+    # combine_file(args.input_folder, args.output_folder,'train.w2d.tfidf.jsonl', length // 2)
+
+if __name__ == "__main__":
+    main()
