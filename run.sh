@@ -34,6 +34,10 @@ elif [ $model == 'HDSG' ]; then
     eval_iter=5000
 fi
 
+if [ $dataset == 'qidian_1109_seq_winsize3' ]; then
+    max_timesteps=350
+fi
+
 time=$(date "+%Y%m%d_%H%M%S")
 
 if [ $mode == 'debug' ]; then
@@ -45,7 +49,6 @@ if [ $mode == 'debug' ]; then
         --n_feature_size 8 --hidden_size 8 --ffn_inner_hidden_size 8 --lstm_hidden_state 8 \
         --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
         --vocab_size 30000 --batch_size 4 --doc_max_timesteps $max_timesteps \
-        --train_num_workers 16 \
         --lr_descent --grad_clip -m 5 --eval_after_iterations 25 \
         --cuda --gpu $gpu
 elif [ $mode == 'run' ]; then
@@ -53,7 +56,7 @@ elif [ $mode == 'run' ]; then
     python -u train.py \
         --model $model \
         --data_dir data/$dataset --cache_dir cache/$dataset \
-        --save_root save/$time --log_root log \
+        --save_root save/20201114_073442_HSG --log_root log --restore_model iter_5000 \
         --embedding_path Tencent_AILab_ChineseEmbedding.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size --doc_max_timesteps $max_timesteps \
         --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \

@@ -2,6 +2,7 @@ import os
 import argparse
 
 def combine_file(input_folder, output_folder, output_filename, length):
+    total_lines = 0
     fout = open(os.path.join(output_folder, output_filename), 'w')
     for i in range(length):
         if i < 10:
@@ -10,9 +11,11 @@ def combine_file(input_folder, output_folder, output_filename, length):
             input_filename = os.path.join(input_folder, output_filename + '_' + str(i))
         fin = open(input_filename, encoding='utf-8')
         for line in fin:
+            total_lines += 1
             fout.write(line)
         fin.close()
     fout.close()
+    print('total lines of %s: %d' % (output_filename, total_lines))
 
 def main():
     parser = argparse.ArgumentParser()
