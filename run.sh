@@ -44,8 +44,9 @@ if [ $mode == 'debug' ]; then
         --save_root save/$time --log_root log \
         --n_feature_size 8 --hidden_size 8 --ffn_inner_hidden_size 8 --lstm_hidden_state 8 \
         --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
-        --vocab_size 30000 --batch_size 4 --num_workers 1 --doc_max_timesteps $max_timesteps\
-        --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \
+        --vocab_size 30000 --batch_size 4 --doc_max_timesteps $max_timesteps \
+        --train_num_workers 16 \
+        --lr_descent --grad_clip -m 5 --eval_after_iterations 25 \
         --cuda --gpu $gpu
 elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $gpu
@@ -54,7 +55,7 @@ elif [ $mode == 'run' ]; then
         --data_dir data/$dataset --cache_dir cache/$dataset \
         --save_root save/$time --log_root log \
         --embedding_path Tencent_AILab_ChineseEmbedding.txt --word_emb_dim 200 \
-        --vocab_size 100000 --batch_size $batch_size --doc_max_timesteps $max_timesteps --num_workers 1 \
+        --vocab_size 100000 --batch_size $batch_size --doc_max_timesteps $max_timesteps \
         --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \
         --cuda --gpu $gpu
 else

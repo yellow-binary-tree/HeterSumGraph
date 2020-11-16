@@ -23,6 +23,7 @@ import re
 import os
 from nltk.corpus import stopwords
 
+from itertools import cycle
 import glob
 import copy
 import random
@@ -140,13 +141,13 @@ class Example2(Example):
             cur += docLen
 
 
-######################################### ExampleSet #########################################
+######################################### train IterDatasets #########################################
 
-class ExampleSet(torch.utils.data.Dataset):
+class IterDataset(torch.utils.data.IterableDataset):
     """ Constructor: Dataset of example(object) for single document summarization"""
 
-    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, data_mode='train'):
-        """ Initializes the ExampleSet with the path of data
+    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path):
+        """ Initializes the IterDataset with the path of data
         
         :param data_path: string; the path of data
         :param vocab: object;
@@ -161,31 +162,9 @@ class ExampleSet(torch.utils.data.Dataset):
         self.vocab = vocab
         self.sent_max_len = sent_max_len
         self.doc_max_timesteps = doc_max_timesteps
-        self.data_mode = data_mode
-        self.examples_fetched = 0
+        self.size = int(os.popen('wc -l {}'.format(data_path)).read().split()[0])
 
-        if self.data_mode == 'train':
-            logger.info("[INFO] Start reading %s", self.__class__.__name__)
-            self.size = 0
-            f = open(data_path, encoding='utf-8')
-            for line in f:
-                self.size += 1
-            f.close()
-            self.data_fd = open(data_path, encoding='utf-8')
-            logger.info("[INFO] Finish reading %s. Total size is %d", self.__class__.__name__, self.size)
-
-            logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
-            self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
-        else:
-            logger.info("[INFO] Start reading %s", self.__class__.__name__)
-            start = time.time()
-            self.example_list = readJson(data_path)
-            logger.info("[INFO] Finish reading %s. Total time is %f, Total size is %d", self.__class__.__name__,
-                        time.time() - start, len(self.example_list))
-            self.size = len(self.example_list)
-
-            logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
-            self.w2s_tfidf = readJson(w2s_path)
+        logger.info("[INFO] reading %s, data length = %d", self.__class__.__name__, self.size)
 
         logger.info("[INFO] Loading filter word File %s", filter_word_path)
         tfidf_w = readText(filter_word_path)
@@ -204,21 +183,62 @@ class ExampleSet(torch.utils.data.Dataset):
             if lowtfidf_num > 5000:
                 break
 
-    def get_w2s_tfidf(self, index):
-        if self.data_mode == 'train':
-            return json.loads(self.w2s_tfidf_fd.readline().strip())
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            num_workers, worker_id = 1, 0
         else:
-            return self.w2s_tfidf[index]
+            num_workers, worker_id = worker_info.num_workers, worker_info.id
+        return ExampleSet(num_workers, worker_id, self.data_path, self.w2s_path, self.size, self.vocab, self.sent_max_len, self.doc_max_timesteps, self.filterids)
 
-    def get_example(self, index):
-        if self.data_mode == 'train':
-            e_text = self.data_fd.readline()
-            e = json.loads(e_text)
-        else:
-            e = self.example_list[index]
+class ExampleSet():
+    def __init__(self, num_workers, worker_id, data_path, w2s_path, size, vocab, sent_max_len, doc_max_timesteps, filterids):
+        self.num_workers = num_workers
+        self.worker_id = worker_id
+        self.size = size
+        self.vocab = vocab
+        self.sent_max_len = sent_max_len
+        self.doc_max_timesteps = doc_max_timesteps
+        self.filterids = filterids
+
+        self.data_fd = open(data_path, encoding='utf-8')
+        self.w2s_tfidf_fd = open(w2s_path, encoding='utf-8')
+        self.cur_line_data = -1
+        self.cur_line_w2s = -1
+
+    def get_w2s_tfidf(self):
+        while True:
+            self.cur_line_w2s += 1
+            if self.cur_line_w2s % self.num_workers != self.worker_id:
+                self.w2s_tfidf_fd.readline()
+            elif self.cur_line_w2s >= self.size:
+                return None
+            else:
+                return json.loads(self.w2s_tfidf_fd.readline())
+
+    def get_example(self):
+        while True:
+            self.cur_line_data += 1
+            if self.cur_line_data % self.num_workers != self.worker_id:
+                self.data_fd.readline()
+            elif self.cur_line_data >= self.size:
+                return None
+            else:
+                e = json.loads(self.data_fd.readline())
+                break
         e["summary"] = e.setdefault("summary", [])
         example = Example(e["text"], e["summary"], self.vocab, self.sent_max_len, e["label"])
         return example
+
+    def __next__(self):
+        item = self.get_example()
+        w2s_w = self.get_w2s_tfidf()
+        if item is None or w2s_w is None:
+            raise StopIteration
+        input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
+        label = self.pad_label_m(item.label_matrix)
+        G = self.CreateGraph(input_pad, label, w2s_w)
+        return (G, self.cur_line_data)
 
     def pad_label_m(self, label_matrix):
         label_m = label_matrix[:self.doc_max_timesteps, :self.doc_max_timesteps]
@@ -295,42 +315,11 @@ class ExampleSet(torch.utils.data.Dataset):
         G.nodes[sentid2nid].data["words"] = torch.LongTensor(input_pad)  # [N, seq_len]
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
         G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
-
         return G
 
-    def __getitem__(self, index):
-        """
-        :param index: int; the index of the example
-        :return 
-            G: graph for the example
-            index: int; the index of the example in the dataset
-        """
-        item = self.get_example(index)
-        w2s_w = self.get_w2s_tfidf(index)
-        input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
-        label = self.pad_label_m(item.label_matrix)
-        G = self.CreateGraph(input_pad, label, w2s_w)
-
-        self.examples_fetched += 1
-        if self.examples_fetched == self.size and self.data_mode == 'train':
-            # reload all the files
-            self.data_fd.close()
-            self.w2s_tfidf_fd.close()
-            self.data_fd = open(self.data_path, encoding='utf-8')
-            self.w2s_tfidf_fd = open(self.w2s_path, encoding='utf-8')
-            self.examples_fetched = 0
-
-        return G, index
-
-    def __len__(self):
-        return self.size
-
-
-class MultiExampleSet(ExampleSet):
-    """ Constructor: Dataset of example(object) for multiple document summarization"""
-    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, w2d_path, data_mode='train'):
+class MultiIterDataset(IterDataset):
+    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, w2d_path):
         """ Initializes the ExampleSet with the path of data
-
         :param data_path: string; the path of data
         :param vocab: object;
         :param doc_max_timesteps: int; the maximum sentence number of a document, each example should pad sentences to this length
@@ -339,32 +328,62 @@ class MultiExampleSet(ExampleSet):
         :param w2s_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2sTFIDF.py)
         :param w2d_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2dTFIDF.py)
         """
-
-        super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, data_mode)
+        super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path)
         self.w2d_path = w2d_path
 
-        if self.data_mode == 'train':
-            logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
-            self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            num_workers, worker_id = 1, 0
         else:
-            logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
-            self.w2d_tfidf = readJson(w2d_path)
+            num_workers, worker_id = worker_info.num_workers, worker_info.id
+        return MultiExampleSet(num_workers, worker_id, self.data_path, self.w2s_path, self.w2d_path, self.size, self.vocab, self.sent_max_len, self.doc_max_timesteps, self.filterids)
 
-    def get_w2d_tfidf(self, index):
-        if self.data_mode == 'train':
-            return json.loads(self.w2d_tfidf_fd.readline())
-        else:
-            return self.w2d_tfidf[index]
+class MultiExampleSet(ExampleSet):
+    """ Constructor: Dataset of example(object) for multiple document summarization"""
+    def __init__(self, num_workers, worker_id, data_path, w2s_path, w2d_path, size, vocab, sent_max_len, doc_max_timesteps, filterids):
 
-    def get_example(self, index):
-        if self.data_mode == 'train':
-            e_text = self.data_fd.readline()
-            e = json.loads(e_text)
-        else:
-            e = self.example_list[index]
+        super().__init__(num_workers, worker_id, data_path, w2s_path, size, vocab, sent_max_len, doc_max_timesteps, filterids)
+        self.w2d_tfidf_fd = open(w2d_path, encoding='utf-8')
+        self.cur_line_w2d = -1
+
+    def get_w2d_tfidf(self):
+        while True:
+            self.cur_line_w2d += 1
+            if self.cur_line_w2d % self.num_workers != self.worker_id:
+                self.w2d_tfidf_fd.readline()
+            elif self.cur_line_w2d >= self.size:
+                return None
+            else:
+                return json.loads(self.w2d_tfidf_fd.readline())
+
+    def get_example(self):
+        while True:
+            self.cur_line_data += 1
+            if self.cur_line_data % self.num_workers != self.worker_id:
+                self.data_fd.readline()
+            elif self.cur_line_data >= self.size:
+                return None
+            else:
+                e = json.loads(self.data_fd.readline())
+                break
         e["summary"] = e.setdefault("summary", [])
         example = Example2(e["text"], e["summary"], e["extractable"], self.vocab, self.sent_max_len, e["label"])
         return example
+
+    def __next__(self):
+        item = self.get_example()
+        w2s_w = self.get_w2s_tfidf()
+        w2d_w = self.get_w2d_tfidf()
+        if item is None or w2s_w is None or w2d_w is None:
+            raise StopIteration
+        sent_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
+        extractable_labels = item.extractable_labels[:self.doc_max_timesteps]
+        enc_doc_input = item.enc_doc_input
+        article_len = item.article_len
+        label = self.pad_label_m(item.label_matrix)
+        G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, extractable_labels, w2s_w, w2d_w)
+        return (G, self.cur_line_data)
 
     def MapSent2Doc(self, article_len, sentNum):
         sent2doc = {}
@@ -459,6 +478,136 @@ class MultiExampleSet(ExampleSet):
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
         G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
         G.nodes[sentid2nid].data["extractable"] = torch.LongTensor(extractable_labels).view(-1, 1) # [N, 1]
+        return G
+
+
+######################################### eval Datasets #########################################
+
+class ExampleDataset(torch.utils.data.Dataset):
+    """ Constructor: Dataset of example(object) for single document summarization"""
+
+    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path):
+        """ Initializes the ExampleSet with the path of data
+        
+        :param data_path: string; the path of data
+        :param vocab: object;
+        :param doc_max_timesteps: int; the maximum sentence number of a document, each example should pad sentences to this length
+        :param sent_max_len: int; the maximum token number of a sentence, each sentence should pad tokens to this length
+        :param filter_word_path: str; file path, the file must contain one word for each line and the tfidf value must go from low to high (the format can refer to script/lowTFIDFWords.py) 
+        :param w2s_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2sTFIDF.py)
+        """
+
+        self.vocab = vocab
+        self.sent_max_len = sent_max_len
+        self.doc_max_timesteps = doc_max_timesteps
+
+        logger.info("[INFO] Start reading %s", self.__class__.__name__)
+        start = time.time()
+        self.example_list = readJson(data_path)
+        logger.info("[INFO] Finish reading %s. Total time is %f, Total size is %d", self.__class__.__name__,
+                    time.time() - start, len(self.example_list))
+        self.size = len(self.example_list)
+
+        logger.info("[INFO] Loading filter word File %s", filter_word_path)
+        tfidf_w = readText(filter_word_path)
+        self.filterwords = FILTERWORD
+        self.filterids = [vocab.word2id(w.lower()) for w in FILTERWORD]
+        self.filterids.append(vocab.word2id("[PAD]"))   # keep "[UNK]" but remove "[PAD]"
+        lowtfidf_num = 0
+        pattern = r"^[0-9]+$"
+        for w in tfidf_w:
+            if vocab.word2id(w) != vocab.word2id('[UNK]'):
+                self.filterwords.append(w)
+                self.filterids.append(vocab.word2id(w))
+                # if re.search(pattern, w) == None:  # if w is a number, it will not increase the lowtfidf_num
+                    # lowtfidf_num += 1
+                lowtfidf_num += 1
+            if lowtfidf_num > 5000:
+                break
+
+        logger.info("[INFO] Loading word2sent TFIDF file from %s!" % w2s_path)
+        self.w2s_tfidf = readJson(w2s_path)
+
+    def get_example(self, index):
+        e = self.example_list[index]
+        e["summary"] = e.setdefault("summary", [])
+        example = Example(e["text"], e["summary"], self.vocab, self.sent_max_len, e["label"])
+        return example
+
+    def pad_label_m(self, label_matrix):
+        label_m = label_matrix[:self.doc_max_timesteps, :self.doc_max_timesteps]
+        N, m = label_m.shape
+        if m < self.doc_max_timesteps:
+            pad_m = np.zeros((N, self.doc_max_timesteps - m))
+            return np.hstack([label_m, pad_m])
+        return label_m
+
+    def AddWordNode(self, G, inputid):
+        wid2nid = {}
+        nid2wid = {}
+        nid = 0
+        for sentid in inputid:
+            for wid in sentid:
+                if wid not in self.filterids and wid not in wid2nid.keys():
+                    wid2nid[wid] = nid
+                    nid2wid[nid] = wid
+                    nid += 1
+
+        w_nodes = len(nid2wid)
+
+        G.add_nodes(w_nodes)
+        G.set_n_initializer(dgl.init.zero_initializer)
+        G.ndata["unit"] = torch.zeros(w_nodes)
+        G.ndata["id"] = torch.LongTensor(list(nid2wid.values()))
+        G.ndata["dtype"] = torch.zeros(w_nodes)
+
+        return wid2nid, nid2wid
+
+    def CreateGraph(self, input_pad, label, w2s_w):
+        """ Create a graph for each document
+        
+        :param input_pad: list(list); [sentnum, wordnum]
+        :param label: list(list); [sentnum, sentnum]
+        :param w2s_w: dict(dict) {str: {str: float}}; for each sentence and each word, the tfidf between them
+        :return: G: dgl.DGLGraph
+            node:
+                word: unit=0, dtype=0, id=(int)wordid in vocab
+                sentence: unit=1, dtype=1, words=tensor, position=int, label=tensor
+            edge:
+                word2sent, sent2word:  tffrac=int, dtype=0
+        """
+        G = dgl.DGLGraph()
+        wid2nid, nid2wid = self.AddWordNode(G, input_pad)
+        w_nodes = len(nid2wid)
+
+        N = len(input_pad)
+        G.add_nodes(N)
+        G.ndata["unit"][w_nodes:] = torch.ones(N)
+        G.ndata["dtype"][w_nodes:] = torch.ones(N)
+        sentid2nid = [i + w_nodes for i in range(N)]
+
+        G.set_e_initializer(dgl.init.zero_initializer)
+        for i in range(N):
+            c = Counter(input_pad[i])
+            sent_nid = sentid2nid[i]
+            sent_tfw = w2s_w[str(i)]
+            for wid in c.keys():
+                if wid in wid2nid.keys() and self.vocab.id2word(wid) in sent_tfw.keys():
+                    tfidf = sent_tfw[self.vocab.id2word(wid)]
+                    tfidf_box = np.round(tfidf * 9)  # box = 10
+                    G.add_edges(wid2nid[wid], sent_nid,
+                                data={"tffrac": torch.LongTensor([tfidf_box]), "dtype": torch.Tensor([0])})
+                    G.add_edges(sent_nid, wid2nid[wid],
+                                data={"tffrac": torch.LongTensor([tfidf_box]), "dtype": torch.Tensor([0])})
+            
+            # The two lines can be commented out if you use the code for your own training, since HSG does not use sent2sent edges. 
+            # However, if you want to use the released checkpoint directly, please leave them here.
+            # Otherwise it may cause some parameter corresponding errors due to the version differences.
+            G.add_edges(sent_nid, sentid2nid, data={"dtype": torch.ones(N)})
+            G.add_edges(sentid2nid, sent_nid, data={"dtype": torch.ones(N)})
+        G.nodes[sentid2nid].data["words"] = torch.LongTensor(input_pad)  # [N, seq_len]
+        G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
+        G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
 
         return G
 
@@ -470,25 +619,152 @@ class MultiExampleSet(ExampleSet):
             index: int; the index of the example in the dataset
         """
         item = self.get_example(index)
-        w2s_w = self.get_w2s_tfidf(index)
-        w2d_w = self.get_w2d_tfidf(index)
+        input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
+        label = self.pad_label_m(item.label_matrix)
+        w2s_w = self.w2s_tfidf[index]
+        G = self.CreateGraph(input_pad, label, w2s_w)
+
+        return G, index
+
+    def __len__(self):
+        return self.size
+
+
+class MultiExampleDataset(ExampleDataset):
+    """ Constructor: Dataset of example(object) for multiple document summarization"""
+    def __init__(self, data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path, w2d_path):
+        """ Initializes the ExampleSet with the path of data
+
+        :param data_path: string; the path of data
+        :param vocab: object;
+        :param doc_max_timesteps: int; the maximum sentence number of a document, each example should pad sentences to this length
+        :param sent_max_len: int; the maximum token number of a sentence, each sentence should pad tokens to this length
+        :param filter_word_path: str; file path, the file must contain one word for each line and the tfidf value must go from low to high (the format can refer to script/lowTFIDFWords.py) 
+        :param w2s_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2sTFIDF.py)
+        :param w2d_path: str; file path, each line in the file contain a json format data (which can refer to the format can refer to script/calw2dTFIDF.py)
+        """
+
+        super().__init__(data_path, vocab, doc_max_timesteps, sent_max_len, filter_word_path, w2s_path)
+
+        logger.info("[INFO] Loading word2doc TFIDF file from %s!" % w2d_path)
+        self.w2d_tfidf = readJson(w2d_path)
+
+    def get_example(self, index):
+        e = self.example_list[index]
+        e["summary"] = e.setdefault("summary", [])
+        example = Example2(e["text"], e["summary"], e['extractable'], self.vocab, self.sent_max_len, e["label"])
+        return example
+
+    def MapSent2Doc(self, article_len, sentNum):
+        sent2doc = {}
+        doc2sent = {}
+        sentNo = 0
+        for i in range(len(article_len)):
+            doc2sent[i] = []
+            for j in range(article_len[i]):
+                sent2doc[sentNo] = i
+                doc2sent[i].append(sentNo)
+                sentNo += 1
+                if sentNo > sentNum:
+                    return sent2doc
+        return sent2doc
+
+    def CreateGraph(self, docLen, sent_pad, doc_pad, label, extractable_labels, w2s_w, w2d_w):
+        """ Create a graph for each document
+
+        :param docLen: list; the length of each document in this example
+        :param sent_pad: list(list), [sentnum, wordnum]
+        :param doc_pad: list, [document, wordnum]
+        :param label: list(list), [sentnum, sentnum]
+        :param w2s_w: dict(dict) {str: {str: float}}, for each sentence and each word, the tfidf between them
+        :param w2d_w: dict(dict) {str: {str: float}}, for each document and each word, the tfidf between them
+        :return: G: dgl.DGLGraph
+            node:
+                word: unit=0, dtype=0, id=(int)wordid in vocab
+                sentence: unit=1, dtype=1, words=tensor, position=int, label=tensor
+                document: unit=1, dtype=2
+            edge:
+                word2sent, sent2word: tffrac=int, dtype=0
+                word2doc, doc2word: tffrac=int, dtype=0
+                sent2doc: dtype=2
+        """
+        # add word nodes
+        G = dgl.DGLGraph()
+        wid2nid, nid2wid = self.AddWordNode(G, sent_pad)
+        w_nodes = len(nid2wid)
+
+        # add sent nodes
+        N = len(sent_pad)
+        G.add_nodes(N)
+        G.ndata["unit"][w_nodes:] = torch.ones(N)
+        G.ndata["dtype"][w_nodes:] = torch.ones(N)
+        sentid2nid = [i + w_nodes for i in range(N)]
+        ws_nodes = w_nodes + N
+
+        # add doc nodes
+        sent2doc = self.MapSent2Doc(docLen, N)
+        article_num = len(set(sent2doc.values()))
+        G.add_nodes(article_num)
+        G.ndata["unit"][ws_nodes:] = torch.ones(article_num)
+        G.ndata["dtype"][ws_nodes:] = torch.ones(article_num) * 2
+        docid2nid = [i + ws_nodes for i in range(article_num)]
+
+        # add sent edges
+        for i in range(N):
+            c = Counter(sent_pad[i])
+            sent_nid = sentid2nid[i]
+            sent_tfw = w2s_w[str(i)]
+            for wid, cnt in c.items():
+                if wid in wid2nid.keys() and self.vocab.id2word(wid) in sent_tfw.keys():
+                    tfidf = sent_tfw[self.vocab.id2word(wid)]
+                    tfidf_box = np.round(tfidf * 9)  # box = 10
+                    # w2s s2w
+                    G.add_edge(wid2nid[wid], sent_nid,
+                               data={"tffrac": torch.LongTensor([tfidf_box]), "dtype": torch.Tensor([0])})
+                    G.add_edge(sent_nid, wid2nid[wid],
+                               data={"tffrac": torch.LongTensor([tfidf_box]), "dtype": torch.Tensor([0])})
+            # s2d
+            docid = sent2doc[i]
+            docnid = docid2nid[docid]
+            G.add_edge(sent_nid, docnid, data={"dtype": torch.Tensor([2])})
+
+        # add doc edges
+        for i in range(article_num):
+            c = Counter(doc_pad[i])
+            doc_nid = docid2nid[i]
+            doc_tfw = w2d_w[str(i)]
+            for wid, cnt in c.items():
+                if wid in wid2nid.keys() and self.vocab.id2word(wid) in doc_tfw.keys():
+                    # w2d d2w
+                    tfidf = doc_tfw[self.vocab.id2word(wid)]
+                    tfidf_box = np.round(tfidf * 9)  # box = 10
+                    G.add_edge(wid2nid[wid], doc_nid,
+                               data={"tffrac": torch.LongTensor([tfidf_box]), "dtype": torch.Tensor([0])})
+                    G.add_edge(doc_nid, wid2nid[wid],
+                               data={"tffrac": torch.LongTensor([tfidf_box]), "dtype": torch.Tensor([0])})
+
+        G.nodes[sentid2nid].data["words"] = torch.LongTensor(sent_pad)  # [N, seq_len]
+        G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
+        G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
+        G.nodes[sentid2nid].data["extractable"] = torch.LongTensor(extractable_labels).view(-1, 1) # [N, 1]
+        return G
+
+    def __getitem__(self, index):
+        """
+        :param index: int; the index of the example
+        :return 
+            G: graph for the example
+            index: int; the index of the example in the dataset
+        """
+        item = self.get_example(index)
+        w2s_w = self.w2s_tfidf[index]
+        w2d_w = self.w2d_tfidf[index]
         sent_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
         extractable_labels = item.extractable_labels[:self.doc_max_timesteps]
         enc_doc_input = item.enc_doc_input
         article_len = item.article_len
         label = self.pad_label_m(item.label_matrix)
         G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, extractable_labels, w2s_w, w2d_w)
-
-        self.examples_fetched += 1
-        if self.examples_fetched == self.size and self.data_mode == 'train':
-            # reload all the files
-            self.data_fd.close()
-            self.w2s_tfidf_fd.close()
-            self.w2d_tfidf_fd.close()
-            self.data_fd = open(self.data_path, encoding='utf-8')
-            self.w2s_tfidf_fd = open(self.w2s_path, encoding='utf-8')
-            self.w2d_tfidf_fd = open(self.w2d_path, encoding='utf-8')
-            self.examples_fetched = 0
         return G, index
 
 
@@ -502,7 +778,6 @@ class LoadHiExampleSet(torch.utils.data.Dataset):
     def __getitem__(self, index):
         graph_file = os.path.join(self.data_root, "%d.graph.bin" % index)
         g, label_dict = load_graphs(graph_file)
-        # print(graph_file)
         return g[0], index
 
     def __len__(self):
