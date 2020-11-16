@@ -297,7 +297,7 @@ def main():
     parser.add_argument('--log_root', type=str, default='log/', help='Root directory for all logging.')
 
     # Hyperparameters
-    parser.add_argument('--train_num_workers', type=int, default=16, help='num of workers of DataLoader. [default: 16]')
+    parser.add_argument('--train_num_workers', type=int, default=12, help='num of workers of DataLoader. [default: 12]')
     parser.add_argument('--eval_num_workers', type=int, default=6, help='num of workers of DataLoader. [default: 6]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU ID to use. [default: 0]')
     parser.add_argument('--cuda', action='store_true', default=False, help='GPU or CPU [default: False]')
