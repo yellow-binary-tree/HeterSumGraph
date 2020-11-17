@@ -66,6 +66,8 @@ def setup_training(model, train_loader, valid_loader, valset, hps):
         bestmodel_file = os.path.join(train_dir, hps.restore_model)
         model.load_state_dict(torch.load(bestmodel_file))
         hps.save_root = hps.save_root + "_reload"
+        if not os.path.exists(os.path.join(hps.save_root, "train")):
+            os.path.mkdir(os.path.join(hps.save_root, "train"))
     else:
         logger.info("[INFO] Create new model for training...")
         if os.path.exists(train_dir): shutil.rmtree(train_dir)
