@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash run.sh debug HDSG qidian_sample_seq 7 > HDSG_1114_debug.log 2>&1 &
+# nohup bash run.sh run HDSG qidian_1109_seq 7 > HDSG_1116.log 2>&1 &
 
 mode=$1
 model=$2
@@ -56,7 +56,7 @@ elif [ $mode == 'run' ]; then
     python -u train.py \
         --model $model \
         --data_dir data/$dataset --cache_dir cache/$dataset \
-        --save_root save/20201114_073442_HSG --log_root log --restore_model iter_5000 \
+        --save_root save/$time --log_root log \
         --embedding_path Tencent_AILab_ChineseEmbedding.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size --doc_max_timesteps $max_timesteps \
         --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \
