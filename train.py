@@ -75,9 +75,9 @@ def setup_training(model, train_loader, valid_loader, valset, hps):
         run_training(model, train_loader, valid_loader, valset, hps, train_dir)
     except KeyboardInterrupt:
         logger.error("[Error] Caught keyboard interrupt on worker. Stopping supervisor...")
-        save_model(model, os.path.join(train_dir, "earlystop"))
+        save_model(model, os.path.join(hps.save_root, "train", "earlystop"))
     except Exception as err:
-        save_model(model, os.path.join(train_dir, "exception"))
+        save_model(model, os.path.join(hps.save_root, "train", "exception"))
         logger.error("[Error] training ended with error")
         raise err
 
