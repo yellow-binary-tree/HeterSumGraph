@@ -297,8 +297,8 @@ def main():
     parser.add_argument('--log_root', type=str, default='log/', help='Root directory for all logging.')
 
     # Hyperparameters
-    parser.add_argument('--train_num_workers', type=int, default=16, help='num of workers of DataLoader. [default: 16]')
-    parser.add_argument('--eval_num_workers', type=int, default=6, help='num of workers of DataLoader. [default: 6]')
+    parser.add_argument('--train_num_workers', type=int, default=4, help='num of workers of DataLoader. [default: 12]')
+    parser.add_argument('--eval_num_workers', type=int, default=4, help='num of workers of DataLoader. [default: 6]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU ID to use. [default: 0]')
     parser.add_argument('--cuda', action='store_true', default=False, help='GPU or CPU [default: False]')
     parser.add_argument('--vocab_size', type=int, default=50000,help='Size of vocabulary. [default: 50000]')
@@ -325,7 +325,7 @@ def main():
     parser.add_argument('--sent_max_len', type=int, default=100,help='max length of sentences (max source text sentence tokens)')
     parser.add_argument('--doc_max_timesteps', type=int, default=50,help='max length of documents (max timesteps of documents)')
     parser.add_argument('--eval_after_iterations', type=int, default=3000, help='perform eval after n iterations of training')
-    parser.add_argument('--report_every', type=int, default=100, help='print information after n iterations of training')
+    parser.add_argument('--report_every', type=int, default=10, help='print information after n iterations of training')
 
     # Training
     parser.add_argument('--lr', type=float, default=0.0005, help='learning rate')
@@ -376,20 +376,20 @@ def main():
         model = HSumGraph(hps, embed)
         logger.info("[MODEL] HeterSumGraph ")
         dataset = IterDataset(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path)
-        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.train_num_workers, collate_fn=graph_collate_fn)
+        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.train_num_workers, collate_fn=graph_collate_fn, pin_memory=True)
         del dataset
         valid_dataset = ExampleDataset(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path)
-        valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.eval_num_workers)
+        valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.eval_num_workers, pin_memory=True)
     elif hps.model == "HDSG":
         model = HSumDocGraph(hps, embed)
         logger.info("[MODEL] HeterDocSumGraph ")
         train_w2d_path = os.path.join(args.cache_dir, "train.w2d.tfidf.jsonl")
         dataset = MultiIterDataset(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, train_w2s_path, train_w2d_path)
-        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.train_num_workers, collate_fn=graph_collate_fn)
+        train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.train_num_workers, collate_fn=graph_collate_fn, pin_memory=True)
         del dataset
         val_w2d_path = os.path.join(args.cache_dir, "val.w2d.tfidf.jsonl")
         valid_dataset = MultiExampleDataset(VALID_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, val_w2s_path, val_w2d_path)
-        valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.eval_num_workers)  # Shuffle Must be False for ROUGE evaluation
+        valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.eval_num_workers, pin_memory=True)  # Shuffle Must be False for ROUGE evaluation
     else:
         logger.error("[ERROR] Invalid Model Type!")
         raise NotImplementedError("Model Type has not been implemented")
