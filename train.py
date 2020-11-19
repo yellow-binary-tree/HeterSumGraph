@@ -36,6 +36,8 @@ from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
 from tools.logger import *
 
+logger.debug('[DEBUG] logging in debug mode.')
+
 from tensorboardX import SummaryWriter
 
 nowTime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -113,16 +115,22 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
         epoch_loss = 0.0
         train_loss = 0.0
         epoch_start_time = time.time()
-        for i, (G, index) in enumerate(train_loader):
+        for i, (G_cpu, index) in enumerate(train_loader):
             iters_elapsed += 1
             iter_start_time = time.time()
             model.train()
 
+
+            time1 = time.time()
             if hps.cuda:
-                G.to(torch.device("cuda"))
-
+                G = G_cpu.to(torch.device("cuda"))
+            time2 = time.time()
+            logger.debug('[DEBUG] iter %d,  transfer data to cuda: time %.5f' % (iters_elapsed, (time2-time1)))
+            
             outputs = model.forward(G)  # [n_snodes, 2]
-
+            time3 = time.time()
+            logger.debug('[DEBUG] iter %d, forward graph G: time %.5f' % (iters_elapsed, (time3-time2)))
+            
             snode_id = G.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
             if hps.model == 'HDSG':
                 snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
@@ -131,6 +139,8 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             G.nodes[snode_id].data["loss"] = criterion(outputs, label).unsqueeze(-1)  # [n_nodes, 1]
             loss = dgl.sum_nodes(G, "loss")  # [batch_size, 1]
             loss = loss.mean()
+            time4 = time.time()
+            logger.debug('[DEBUG] iter %d, calculate loss: time %.5f' % (iters_elapsed, (time4-time3)))
 
             if not (np.isfinite(loss.data.cpu())).numpy():
                 logger.error("train Loss is not finite. Stopping.")
@@ -147,6 +157,9 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), hps.max_grad_norm)
 
             optimizer.step()
+
+            time5 = time.time()
+            logger.debug('[DEBUG] iter %d, optimizer step: time %.5f' % (iters_elapsed, (time5-time4)))
 
             train_loss += float(loss.data)
             epoch_loss += float(loss.data)
@@ -169,6 +182,8 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                     logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
                     save_model(model, os.path.join(train_dir, "earlystop"))
                     return
+            time6 = time.time()
+            logging.debug('[DEBUG] iter %d, total time %.5f' % (iters_elapsed, (time6-iter_start_time)))
 
         if hps.lr_descent:
             new_lr = max(5e-6, hps.lr / (epoch + 1))
@@ -343,13 +358,14 @@ def main():
     torch.set_printoptions(threshold=50000)
 
     # occupy gpu
-    devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
-    total, used = devices_info[int(args.gpu)].split(',')
-    occupy_mem = int(int(total)*0.90 - int(used))
-    if occupy_mem > 0:
-        occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
-        del occupy
-    logger.info('[INFO] occupied %d MB' % occupy_mem)
+    # devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
+    # total, used = devices_info[int(args.gpu)].split(',')
+    # occupy_mem = int(int(total)*0.90 - int(used))
+    # if occupy_mem > 0:
+    #     occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
+    #     occupy = occupy.cpu()
+    #     del occupy
+    # logger.info('[INFO] occupied %d MB' % occupy_mem)
 
 
     # File paths
