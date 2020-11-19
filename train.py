@@ -327,7 +327,7 @@ def main():
     parser.add_argument('--sent_max_len', type=int, default=100, help='max length of sentences (max source text sentence tokens)')
     parser.add_argument('--doc_max_timesteps', type=int, default=50,help='max length of documents (max timesteps of documents)')
     parser.add_argument('--eval_after_iterations', type=int, default=3000, help='perform eval after n iterations of training')
-    parser.add_argument('--report_every', type=int, default=10, help='print information after n iterations of training')
+    parser.add_argument('--report_every', type=int, default=50, help='print information after n iterations of training')
 
     # Training
     parser.add_argument('--lr', type=float, default=0.0005, help='learning rate')

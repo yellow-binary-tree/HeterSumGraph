@@ -171,14 +171,14 @@ class GraphPreprocesser(object):
             if i < self.processed_graphs:
                 self.data_fd.readline()
                 self.w2s_fd.readline()
-                yield None, None, None
+                yield None, None, None, i
                 continue
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
             label = self.pad_label_m(item.label_matrix)
             G = self.CreateGraph(input_pad, label, w2s_w)
-            yield G, bookid, chapno
+            yield G, bookid, chapno, i
 
     def get_example(self):
         e = json.loads(self.data_fd.readline())
@@ -275,7 +275,7 @@ class MultiGraphPreprocesser(GraphPreprocesser):
                 self.data_fd.readline()
                 self.w2s_fd.readline()
                 self.w2d_fd.readline()
-                yield None, None, None
+                yield None, None, None, i
                 continue
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
@@ -286,7 +286,7 @@ class MultiGraphPreprocesser(GraphPreprocesser):
             article_len = item.article_len
             label = self.pad_label_m(item.label_matrix)
             G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, extractable_labels, w2s_w, w2d_w)
-            yield G, bookid, chapno
+            yield G, bookid, chapno, i
 
     def get_example(self):
         e = json.loads(self.data_fd.readline())
@@ -409,7 +409,8 @@ class ProcessThread(threading.Thread):
     def run(self):
         print('[graph] start thread: %d' % self._id)
         gp = GraphPreprocesser(self.src_data_file, self.src_w2s_file, self.hps.doc_max_timesteps, self.hps.sent_max_len, processed_graphs=self.processed_graphs)
-        for i, (graph, bookid, chapno) in enumerate(gp.process()):
+        for i, (graph, bookid, chapno, index) in enumerate(gp.process()):
+            assert i == index, "data id != graph id"
             if graph is None:
                 continue
             graph_label ={"content": torch.tensor([int(bookid), int(chapno)])}
@@ -423,10 +424,13 @@ class MultiProcessThread(ProcessThread):
 
     def run(self):
         print('[graph] start thread: %d' % self._id)
-        mgp = MultiGraphPreprocesser(self.src_data_file, self.src_w2s_file, self.src_w2d_file, self.hps.doc_max_timesteps, self.hps.sent_max_len)
-        for i, (graph, bookid, chapno) in enumerate(mgp.process()):
+        mgp = MultiGraphPreprocesser(self.src_data_file, self.src_w2s_file, self.src_w2d_file, self.hps.doc_max_timesteps, self.hps.sent_max_len, self.processed_graphs)
+        for i, (graph, bookid, chapno, index) in enumerate(mgp.process()):
+            assert i == index, "data id != graph id"
             if graph is None:
                 continue
+            if i % 10 == 0:
+                print('[graph] thread %d writing grpah: %d' % (self._id, i))
             graph_label ={"content": torch.tensor([int(bookid), int(chapno)])}
             save_graphs(os.path.join(self.dest_folder, str(i)+'.bin'), [graph], graph_label)
         print('[graph] finish thread: %d' % self._id)

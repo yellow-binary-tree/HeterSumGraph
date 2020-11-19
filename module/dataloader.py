@@ -95,14 +95,15 @@ class ExampleSet():
             if self.data_no % self.num_workers == self.worker_id:
                 break
         graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
-        print("[WYQDEBUG] worker %d datano %d folder %d graph %d", self.worker_id, self.data_no, self.folder_i, self.graph_i)
         return graphs[0], self.data_no
 
 class Example():
     def __init__(self, summary, ori_text):
-        self.original_abstract = summary
+        self.original_abstract = "\n".join(summary)
         if isinstance(ori_text, list) and isinstance(ori_text[0], list):
-            self.original_article_sents = [sen for chap in ori_text for sen in chap]
+            self.original_article_sents = []
+            for chap in ori_text:
+                self.original_article_sents.extend(chap)
         else:
             self.original_article_sents = ori_text
 
@@ -113,7 +114,7 @@ class MapDataset(torch.utils.data.Dataset):
     def __init__(self, data_path, cache_path, mode='val'):
         self.cache_path = cache_path
         self.mode = mode
-        self.size = os.listdir(os.path.join(cache_path, 'graph', mode))
+        self.size = len(os.listdir(os.path.join(cache_path, 'graph', mode)))
         self.example_list = readJson(os.path.join(data_path, mode+'.json'))
 
     def get_example(self, index):
@@ -127,12 +128,11 @@ class MapDataset(torch.utils.data.Dataset):
             G: graph for the example
             index: int; the index of the example in the dataset
         """
-        graphs, labels = load_graphs(os.path.join(self.cache_path, self.mode, str(index)+'.bin'))
+        graphs, labels = load_graphs(os.path.join(self.cache_path, 'graph', self.mode, str(index)+'.bin'))
         return graphs[0], index
 
     def __len__(self):
         return self.size
-
 
 def readJson(fname):
     data = []

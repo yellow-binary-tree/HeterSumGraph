@@ -34,7 +34,7 @@ if [ $mode == 'debug' ]; then
         --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size 1 \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
-        --lr_descent --grad_clip -m 5 --eval_after_iterations 50 \
+        --lr_descent --grad_clip -m 5 --eval_after_iterations 100 \
         --cuda --gpu $gpu
 elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $winsize $gpu

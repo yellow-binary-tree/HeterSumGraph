@@ -1,8 +1,6 @@
 #!/bin/bash
 
 # run the script like:
-# nohup bash myPrepareDataset.sh winsize1 HSG > new_preprocess.log 2>&1 &
-# nohup bash myPrepareDataset.sh qidian_1118_winsize3 HDSG > new_preprocess.log 2>&1 &
 
 dataset="$1"
 task="$2"
@@ -28,7 +26,7 @@ elif [ $task == 'HDSG7' ]; then
     doc_max_timesteps=310
 fi
 
-num_proc=4
+num_proc=8
 
 # {
 #     echo -e "\033[34m[Shell] Get low tfidf words from training set! \033[0m"
