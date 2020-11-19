@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash run.sh debug HSG winsize1 1 1 > HDSG_1118_debug.log 2>&1 &
+# nohup bash run.sh debug HDSG winsize5 5 3 > HDSG_1119_debug.log 2>&1 &
 
 mode=$1
 model=$2
@@ -13,9 +13,9 @@ if [ $winsize == 1 ]; then
     doc_max_timesteps=70
 elif [ $winsize == 3 ]; then
     doc_max_timesteps=150
-elif [ $winsize == 5]; then
+elif [ $winsize == 5 ]; then
     doc_max_timesteps=230
-elif [ $winsize == 7]; then
+elif [ $winsize == 7 ]; then
     doc_max_timesteps=310
 fi
 
