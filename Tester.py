@@ -77,7 +77,7 @@ class TestPipLine():
     def extractLabel(self):
         return self.extracts
 
-    
+
 class SLTester(TestPipLine):
     def __init__(self, model, hps, test_dir=None, limited=False, blocking_win=3):
         super().__init__(model, hps, test_dir, limited)

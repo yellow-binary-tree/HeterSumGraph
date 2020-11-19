@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # run the script like:
-# nohup bash myPrepareDataset.sh qidian_1118_winsize1 HSG > new_preprocess.log 2>&1 &
+# nohup bash myPrepareDataset.sh winsize1 HSG > new_preprocess.log 2>&1 &
 # nohup bash myPrepareDataset.sh qidian_1118_winsize3 HDSG > new_preprocess.log 2>&1 &
 
 dataset="$1"
@@ -30,25 +30,25 @@ fi
 
 num_proc=4
 
-{
-    echo -e "\033[34m[Shell] Get low tfidf words from training set! \033[0m"
-    python -u script/myLowTFIDFWords.py --dataset $dataset
-} &
-echo -e "\033[34m[Shell] Get word2sent edge feature! \033[0m"
-for i in `seq 1 $num_proc`
-do {
-    python -u script/myCalw2sTFIDF.py --dataset $dataset --num_proc $num_proc --no_proc $i
-} & done
+# {
+#     echo -e "\033[34m[Shell] Get low tfidf words from training set! \033[0m"
+#     python -u script/myLowTFIDFWords.py --dataset $dataset
+# } &
+# echo -e "\033[34m[Shell] Get word2sent edge feature! \033[0m"
+# for i in `seq 1 $num_proc`
+# do {
+#     python -u script/myCalw2sTFIDF.py --dataset $dataset --num_proc $num_proc --no_proc $i
+# } & done
 
-if [ "$task" != "HSG" ]; 
-then {
-    echo -e "\033[34m[Shell] Get word2doc edge feature! \033[0m"
-        python -u script/myCalw2dTFIDF.py --dataset $dataset 
-} & fi
-{
-    echo -e "\033[34m[Shell] Create Vocabulary! \033[0m"
-    python -u script/myCreateVoc.py --dataset $dataset
-}
+# if [ "$task" != "HSG" ]; 
+# then {
+#     echo -e "\033[34m[Shell] Get word2doc edge feature! \033[0m"
+#         python -u script/myCalw2dTFIDF.py --dataset $dataset 
+# } & fi
+# {
+#     echo -e "\033[34m[Shell] Create Vocabulary! \033[0m"
+#     python -u script/myCreateVoc.py --dataset $dataset
+# }
 
 wait
 
