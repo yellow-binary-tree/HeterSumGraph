@@ -158,19 +158,17 @@ class Example2(Example):
 
 class GraphPreprocesser(object):
 
-    def __init__(self, data_path, w2s_path, doc_max_timesteps, sent_max_len, processed_graphs=0):
+    def __init__(self, data_path, w2s_path, doc_max_timesteps, sent_max_len, dest_folder):
         self.data_fd = open(data_path, encoding='utf-8')
         self.w2s_fd = open(w2s_path, encoding='utf-8')
         self.doc_max_timesteps = doc_max_timesteps
         self.sent_max_len = sent_max_len
-        self.processed_graphs = processed_graphs
+        self.processed_graphs = os.listdir(dest_folder)
         self.size = int(os.popen('wc -l {}'.format(data_path)).read().split()[0])
 
     def process(self):
         for i in range(self.size):
-            if i < self.processed_graphs:
-                self.data_fd.readline()
-                self.w2s_fd.readline()
+            if str(i) + '.bin' in self.processed_graphs:
                 yield None, None, None, i
                 continue
             item, bookid, chapno = self.get_example()
@@ -265,16 +263,13 @@ class GraphPreprocesser(object):
         return wid2nid, nid2wid
 
 class MultiGraphPreprocesser(GraphPreprocesser):
-    def __init__(self, data_path, w2s_path, w2d_path, doc_max_timesteps, sent_max_len, processed_graphs=0):
-        super().__init__(data_path, w2s_path, doc_max_timesteps, sent_max_len, processed_graphs)
+    def __init__(self, data_path, w2s_path, w2d_path, doc_max_timesteps, sent_max_len, dest_folder):
+        super().__init__(data_path, w2s_path, doc_max_timesteps, sent_max_len, dest_folder)
         self.w2d_fd = open(w2d_path, encoding='utf-8')
 
     def process(self):
         for i in range(self.size):
-            if i < self.processed_graphs:
-                self.data_fd.readline()
-                self.w2s_fd.readline()
-                self.w2d_fd.readline()
+            if str(i) + '.bin' in self.processed_graphs:
                 yield None, None, None, i
                 continue
             item, bookid, chapno = self.get_example()
@@ -403,12 +398,10 @@ class ProcessThread(threading.Thread):
         self.dest_folder = dest_folder
         self.hps = hps
         self._id = _id
-        self.processed_graphs = len(os.listdir(self.dest_folder))
-        print('[graph] init thread: %d, proccessed_graphs: %d' % (self._id, self.processed_graphs))
 
     def run(self):
         print('[graph] start thread: %d' % self._id)
-        gp = GraphPreprocesser(self.src_data_file, self.src_w2s_file, self.hps.doc_max_timesteps, self.hps.sent_max_len, processed_graphs=self.processed_graphs)
+        gp = GraphPreprocesser(self.src_data_file, self.src_w2s_file, self.hps.doc_max_timesteps, self.hps.sent_max_len, dest_folder=self.dest_folder)
         for i, (graph, bookid, chapno, index) in enumerate(gp.process()):
             assert i == index, "data id != graph id"
             if graph is None:
@@ -424,13 +417,11 @@ class MultiProcessThread(ProcessThread):
 
     def run(self):
         print('[graph] start thread: %d' % self._id)
-        mgp = MultiGraphPreprocesser(self.src_data_file, self.src_w2s_file, self.src_w2d_file, self.hps.doc_max_timesteps, self.hps.sent_max_len, self.processed_graphs)
+        mgp = MultiGraphPreprocesser(self.src_data_file, self.src_w2s_file, self.src_w2d_file, self.hps.doc_max_timesteps, self.hps.sent_max_len, dest_folder=self.dest_folder)
         for i, (graph, bookid, chapno, index) in enumerate(mgp.process()):
             assert i == index, "data id != graph id"
             if graph is None:
                 continue
-            if i % 10 == 0:
-                print('[graph] thread %d writing grpah: %d' % (self._id, i))
             graph_label ={"content": torch.tensor([int(bookid), int(chapno)])}
             save_graphs(os.path.join(self.dest_folder, str(i)+'.bin'), [graph], graph_label)
         print('[graph] finish thread: %d' % self._id)
