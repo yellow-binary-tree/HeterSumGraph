@@ -9,8 +9,8 @@ formatter = logging.Formatter('%(asctime)s %(levelname)-8s: %(message)s')
 
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.formatter = formatter 
-console_handler.setLevel(logging.DEBUG)
-# console_handler.setLevel(logging.INFO)
+# console_handler.setLevel(logging.DEBUG)
+console_handler.setLevel(logging.INFO)
 logger.addHandler(console_handler)
 
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)

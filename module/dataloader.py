@@ -99,10 +99,10 @@ class ExampleSet():
         logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
         try:
             graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
+            return graphs[0], self.data_no
         except:
             logger.debug('[ERROR] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
             return self.__next__()
-        return graphs[0], self.data_no
 
 
 class Example():

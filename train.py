@@ -358,14 +358,14 @@ def main():
     torch.set_printoptions(threshold=50000)
 
     # occupy gpu
-    # devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
-    # total, used = devices_info[int(args.gpu)].split(',')
-    # occupy_mem = int(int(total)*0.90 - int(used))
-    # if occupy_mem > 0:
-    #     occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
-    #     occupy = occupy.cpu()
-    #     del occupy
-    # logger.info('[INFO] occupied %d MB' % occupy_mem)
+    devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
+    total, used = devices_info[int(args.gpu)].split(',')
+    occupy_mem = int(int(total)*0.85 - int(used))
+    if occupy_mem > 0:
+        occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
+        occupy = occupy.cpu()
+        del occupy
+    logger.info('[INFO] occupied %d MB' % occupy_mem)
 
 
     # File paths
