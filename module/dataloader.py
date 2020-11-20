@@ -61,16 +61,16 @@ class IterDataset(torch.utils.data.IterableDataset):
             num_workers, worker_id = 1, 0
         else:
             num_workers, worker_id = worker_info.num_workers, worker_info.id
-        graph_path = os.path.join(self.hps.cache_path, 'graph')
-        return ExampleSet(num_workers, worker_id, graph_path, self.hps)
+        graph_dir = os.path.join(self.hps.cache_dir, 'graph')
+        return ExampleSet(num_workers, worker_id, graph_dir, self.hps)
 
 
 class ExampleSet():
-    def __init__(self, num_workers, worker_id, graph_path, hps):
+    def __init__(self, num_workers, worker_id, graph_dir, hps):
         self.num_workers = num_workers
         self.worker_id = worker_id
-        self.graph_path = graph_path
-        self.graph_data_folder_num = len([f for f in os.listdir(graph_path) if 'train' in f])
+        self.graph_dir = graph_dir
+        self.graph_data_folder_num = len([f for f in os.listdir(graph_dir) if 'train' in f])
         self.folder = None
         self.hps = hps
         self.folder_i = -1
@@ -88,7 +88,7 @@ class ExampleSet():
                 self.graph_i = 0
                 if self.folder_i >= self.graph_data_folder_num:
                     raise StopIteration
-                self.folder = os.path.join(self.graph_path, 'train'+str(self.folder_i))
+                self.folder = os.path.join(self.graph_dir, 'train'+str(self.folder_i))
                 self.folder_records = len(os.listdir(self.folder))
             if self.data_no % self.num_workers == self.worker_id:
                 break
@@ -126,8 +126,8 @@ class MapDataset(torch.utils.data.Dataset):
     def __init__(self, hps, mode='val'):
         self.hps = hps
         self.mode = mode
-        self.size = len(os.listdir(os.path.join(hps.cache_path, 'graph', mode)))
-        self.example_list = readJson(os.path.join(hps.data_path, mode+'.json'))
+        self.size = len(os.listdir(os.path.join(hps.cache_dir, 'graph', mode)))
+        self.example_list = readJson(os.path.join(hps.data_dir, mode+'.json'))
 
     def get_example(self, index):
         e = self.example_list[index]
@@ -141,7 +141,7 @@ class MapDataset(torch.utils.data.Dataset):
             index: int; the index of the example in the dataset
         """
         try:
-            graphs, labels = load_graphs(os.path.join(self.hps.cache_path, 'graph', self.mode, str(index)+'.bin'))
+            graphs, labels = load_graphs(os.path.join(self.hps.cache_dir, 'graph', self.mode, str(index)+'.bin'))
             graph = graph[0]
             # filter erroneous graphs which may cause exception
             graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
