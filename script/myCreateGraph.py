@@ -267,6 +267,7 @@ class GraphPreprocesser(object):
         G.ndata["dtype"] = torch.zeros(w_nodes)
         return wid2nid, nid2wid
 
+
 class MultiGraphPreprocesser(GraphPreprocesser):
     def __init__(self, data_path, w2s_path, w2d_path, doc_max_timesteps, sent_max_len, dest_folder):
         super().__init__(data_path, w2s_path, doc_max_timesteps, sent_max_len, dest_folder)
@@ -276,11 +277,11 @@ class MultiGraphPreprocesser(GraphPreprocesser):
         for i in range(self.size):
             if str(i) + '.bin' in self.processed_graphs:
                 try:
-                    _, _ = load_graphs(os.path.join(self.dest_folder, str(i).bin))
+                    _, _ = load_graphs(os.path.join(self.dest_folder, str(i) + '.bin'))
                     yield None, None, None, i
                     continue
                 except Exception as e:
-                    print(str(e))
+                    print('folder %s, graph %d, error when loading.' % (self.dest_folder ,i))
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             w2d_w = self.get_w2d()

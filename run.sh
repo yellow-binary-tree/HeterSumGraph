@@ -20,7 +20,7 @@ elif [ $winsize == 7 ]; then
 fi
 
 batch_size=32
-eval_iter=6400
+eval_iter=4700
 
 time=$(date "+%Y%m%d_%H%M%S")
 

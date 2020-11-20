@@ -57,3 +57,5 @@ do {
         --dataset $dataset --doc_max_timesteps $doc_max_timesteps --sent_max_len 50 --model $task \
         --num_proc $num_proc --no_proc $i
 } & done
+
+wait
