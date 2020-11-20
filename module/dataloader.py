@@ -50,32 +50,29 @@ from dgl.data.utils import save_graphs, load_graphs
 class IterDataset(torch.utils.data.IterableDataset):
     """ Constructor: Dataset of example(object) for single document summarization"""
 
-    def __init__(self, cache_path):
+    def __init__(self, hps):
         """ Initializes the IterDataset with the path of data
-        
-        :param data_path: string; the path of data folder
-        :param vocab: object;
-        :param cache_path: str; the path of cache folder
         """
-        self.cache_path = cache_path
-    
+        self.hps = hps
+
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is None:
             num_workers, worker_id = 1, 0
         else:
             num_workers, worker_id = worker_info.num_workers, worker_info.id
-        graph_path = os.path.join(self.cache_path, 'graph')
-        return ExampleSet(num_workers, worker_id, graph_path)
+        graph_path = os.path.join(self.hps.cache_path, 'graph')
+        return ExampleSet(num_workers, worker_id, graph_path, self.hps)
 
 
 class ExampleSet():
-    def __init__(self, num_workers, worker_id, graph_path):
+    def __init__(self, num_workers, worker_id, graph_path, hps):
         self.num_workers = num_workers
         self.worker_id = worker_id
         self.graph_path = graph_path
         self.graph_data_folder_num = len([f for f in os.listdir(graph_path) if 'train' in f])
         self.folder = None
+        self.hps = hps
         self.folder_i = -1
         self.graph_i = -1
         self.data_no = -1
@@ -99,9 +96,16 @@ class ExampleSet():
         logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
         try:
             graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
-            return graphs[0], self.data_no
-        except:
-            logger.debug('[ERROR] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
+            graph = graphs[0]
+            # filter erroneous graphs which may cause exception
+            graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+            if self.hps.model == 'HDSG':
+                graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
+            return graph, self.data_no
+        except Exception as e:
+            logger.warning('[WARNING] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
+            logger.warning(str(e))
             return self.__next__()
 
 
@@ -119,11 +123,11 @@ class Example():
 class MapDataset(torch.utils.data.Dataset):
     """ Constructor: Dataset of example(object) for single document summarization"""
 
-    def __init__(self, data_path, cache_path, mode='val'):
-        self.cache_path = cache_path
+    def __init__(self, hps, mode='val'):
+        self.hps = hps
         self.mode = mode
-        self.size = len(os.listdir(os.path.join(cache_path, 'graph', mode)))
-        self.example_list = readJson(os.path.join(data_path, mode+'.json'))
+        self.size = len(os.listdir(os.path.join(hps.cache_path, 'graph', mode)))
+        self.example_list = readJson(os.path.join(hps.data_path, mode+'.json'))
 
     def get_example(self, index):
         e = self.example_list[index]
@@ -136,8 +140,22 @@ class MapDataset(torch.utils.data.Dataset):
             G: graph for the example
             index: int; the index of the example in the dataset
         """
-        graphs, labels = load_graphs(os.path.join(self.cache_path, 'graph', self.mode, str(index)+'.bin'))
-        return graphs[0], index
+        try:
+            graphs, labels = load_graphs(os.path.join(self.hps.cache_path, 'graph', self.mode, str(index)+'.bin'))
+            graph = graph[0]
+            # filter erroneous graphs which may cause exception
+            graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+            if self.hps.model == 'HDSG':
+                graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
+            return graph, index
+        except Exception as e:
+            logger.warning('[WARNING] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
+            logger.warning(str(e))
+            if index < self.size - 1:
+                return self.__getitem__(index + 1)
+            else:
+                return self.__getitem__(0)
 
     def __len__(self):
         return self.size

@@ -406,10 +406,10 @@ def main():
         logger.error("[ERROR] Invalid Model Type!")
         raise NotImplementedError("Model Type has not been implemented")
 
-    dataset = IterDataset(hps.cache_dir)
+    dataset = IterDataset(hps)
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, num_workers=args.train_num_workers, collate_fn=graph_collate_fn, pin_memory=True)
     del dataset
-    valid_dataset = MapDataset(hps.data_dir, hps.cache_dir)
+    valid_dataset = MapDataset(hps)
     valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.eval_num_workers, pin_memory=True)
 
     if args.cuda:
