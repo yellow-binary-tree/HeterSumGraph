@@ -69,7 +69,7 @@ def setup_training(model, train_loader, valid_loader, valset, hps):
         model.load_state_dict(torch.load(bestmodel_file))
         hps.save_root = hps.save_root + "_reload"
         if not os.path.exists(os.path.join(hps.save_root, "train")):
-            os.path.mkdir(os.path.join(hps.save_root, "train"))
+            os.makedirs(os.path.join(hps.save_root, "train"))
     else:
         logger.info("[INFO] Create new model for training...")
         if os.path.exists(train_dir): shutil.rmtree(train_dir)
@@ -109,7 +109,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
     best_F = None
     non_descent_cnt = 0
     saveNo = 0
-    iters_elapsed = 0
+    iters_elapsed = hps.start_iteration
 
     for epoch in range(1, hps.n_epochs + 1):
         epoch_loss = 0.0
@@ -308,6 +308,7 @@ def main():
     # Important settings
     parser.add_argument('--model', type=str, default='HSG', help='model structure[HSG|HDSG]')
     parser.add_argument('--restore_model', type=str, default='None', help='Restore model for further training. [bestmodel/bestFmodel/earlystop/None]')
+    parser.add_argument('--start_iteration', type=int, default=0, help='start at which iteration (>= 0, < 1 epoch)')
 
     # Where to save output
     parser.add_argument('--save_root', type=str, default='save/', help='Root directory for all model.')
@@ -363,7 +364,7 @@ def main():
     occupy_mem = int(int(total)*0.85 - int(used))
     if occupy_mem > 0:
         occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
-        occupy = occupy.cpu()
+        # occupy = occupy.cpu()
         del occupy
     logger.info('[INFO] occupied %d MB' % occupy_mem)
 

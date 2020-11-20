@@ -10,7 +10,7 @@ from collections import Counter
 import numpy as np
 import torch
 import dgl
-from dgl.data.utils import save_graphs
+from dgl.data.utils import save_graphs, load_graphs
 
 sys.path.append('.')
 from module.vocabulary import Vocab
@@ -163,14 +163,19 @@ class GraphPreprocesser(object):
         self.w2s_fd = open(w2s_path, encoding='utf-8')
         self.doc_max_timesteps = doc_max_timesteps
         self.sent_max_len = sent_max_len
+        self.dest_folder = dest_folder
         self.processed_graphs = os.listdir(dest_folder)
         self.size = int(os.popen('wc -l {}'.format(data_path)).read().split()[0])
 
     def process(self):
         for i in range(self.size):
             if str(i) + '.bin' in self.processed_graphs:
-                yield None, None, None, i
-                continue
+                try:
+                    _, _ = load_graphs(os.path.join(self.dest_folder, str(i) + '.bin'))
+                    yield None, None, None, i
+                    continue
+                except Exception as e:
+                    print('folder %s, graph %d, error when loading.' % (self.dest_folder ,i))
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
@@ -270,8 +275,12 @@ class MultiGraphPreprocesser(GraphPreprocesser):
     def process(self):
         for i in range(self.size):
             if str(i) + '.bin' in self.processed_graphs:
-                yield None, None, None, i
-                continue
+                try:
+                    _, _ = load_graphs(os.path.join(self.dest_folder, str(i).bin))
+                    yield None, None, None, i
+                    continue
+                except Exception as e:
+                    print(str(e))
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             w2d_w = self.get_w2d()

@@ -41,7 +41,7 @@ import torch
 import torch.utils.data
 import torch.nn.functional as F
 
-from tools.logger import *
+from tools.logger import logger
 
 import dgl
 from dgl.data.utils import save_graphs, load_graphs
@@ -74,9 +74,19 @@ class ExampleSet():
         self.folder = None
         self.hps = hps
         self.folder_i = -1
-        self.graph_i = -1
         self.data_no = -1
         self.folder_records = -1
+        logger.info("[INFO] itering train dataset to %d" % hps.start_iteration)
+        start_index = hps.start_iteration * hps.batch_size
+        while start_index > 0:
+            self.folder_i += 1
+            if self.folder_i > self.graph_data_folder_num:
+                self.folder_i = 0
+            self.folder_records = len(os.listdir(self.folder))
+            if start_index >= self.folder_records:
+                start_index -= self.folder_records
+        self.graph_i = start_index - 1
+        logger.info("[INFO] starting at: data_no=%d, folder_i=%d, graph_i=%d" % (self.data_no, self.folder_i, self.graph_i))
 
     def __next__(self):
         time1 = time.time()
@@ -136,13 +146,13 @@ class MapDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         """
         :param index: int; the index of the example
-        :return 
+        :return
             G: graph for the example
             index: int; the index of the example in the dataset
         """
         try:
             graphs, labels = load_graphs(os.path.join(self.hps.cache_dir, 'graph', self.mode, str(index)+'.bin'))
-            graph = graph[0]
+            graph = graphs[0]
             # filter erroneous graphs which may cause exception
             graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
             graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
@@ -150,7 +160,7 @@ class MapDataset(torch.utils.data.Dataset):
                 graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
             return graph, index
         except Exception as e:
-            logger.warning('[WARNING] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
+            logger.warning('[WARNING] failed reading graph %d.' % (index))
             logger.warning(str(e))
             if index < self.size - 1:
                 return self.__getitem__(index + 1)
@@ -160,12 +170,14 @@ class MapDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.size
 
+
 def readJson(fname):
     data = []
     with open(fname, encoding="utf-8") as f:
         for line in f:
             data.append(json.loads(line))
     return data
+
 
 def graph_collate_fn(samples):
     '''
@@ -177,4 +189,3 @@ def graph_collate_fn(samples):
     sorted_len, sorted_index = torch.sort(torch.LongTensor(graph_len), dim=0, descending=True)
     batched_graph = dgl.batch([graphs[idx] for idx in sorted_index])
     return batched_graph, [index[idx] for idx in sorted_index]
-
