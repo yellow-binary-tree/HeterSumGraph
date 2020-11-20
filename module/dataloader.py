@@ -82,6 +82,7 @@ class ExampleSet():
         self.folder_records = -1
 
     def __next__(self):
+        time1 = time.time()
         while True:
             self.data_no += 1
             self.graph_i += 1
@@ -94,8 +95,15 @@ class ExampleSet():
                 self.folder_records = len(os.listdir(self.folder))
             if self.data_no % self.num_workers == self.worker_id:
                 break
-        graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
+        time2 = time.time()
+        logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
+        try:
+            graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
+        except:
+            logger.debug('[ERROR] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
+            return self.__next__()
         return graphs[0], self.data_no
+
 
 class Example():
     def __init__(self, summary, ori_text):
