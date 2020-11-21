@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash run.sh run HSG winsize1 1 3 > HDSG_1119_debug.log 2>&1 &
+# nohup bash run.sh run HSG winsize3 3 0 > HDSG3_1121.log 2>&1 &
 
 mode=$1
 model=$2
@@ -19,8 +19,8 @@ elif [ $winsize == 7 ]; then
     doc_max_timesteps=310
 fi
 
-batch_size=32
-eval_iter=4700
+batch_size=16
+eval_iter=$(( 151000/$batch_size ))
 
 time=$(date "+%Y%m%d_%H%M%S")
 
