@@ -21,6 +21,7 @@
 import argparse
 import datetime
 import os
+import sys
 import shutil
 import time
 
@@ -31,19 +32,20 @@ from rouge import Rouge
 
 from HiGraph import HSumGraph, HSumDocGraph
 from Tester import SLTester
-from module.dataloader import IterDataset, MapDataset, graph_collate_fn 
+from module.dataloader import IterDataset, MapDataset, graph_collate_fn
 from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
 from tools.logger import *
 
-logger.debug('[DEBUG] logging in debug mode.')
-
 from tensorboardX import SummaryWriter
+
+logger.debug('[DEBUG] logging in debug mode.')
 
 nowTime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 writer = SummaryWriter(os.path.join('./tensorboard_log/', 'train_' + nowTime))
 
 _DEBUG_FLAG_ = False
+
 
 def save_model(model, save_file):
     with open(save_file, 'wb') as f:
@@ -53,13 +55,12 @@ def save_model(model, save_file):
 
 def setup_training(model, train_loader, valid_loader, valset, hps):
     """ Does setup before starting training (run_training)
-    
         :param model: the model
         :param train_loader: train dataset loader
         :param valid_loader: valid dataset loader
         :param valset: valid dataset which includes text and summary
         :param hps: hps for model
-        :return: 
+        :return:
     """
 
     train_dir = os.path.join(hps.save_root, "train")
@@ -72,7 +73,8 @@ def setup_training(model, train_loader, valid_loader, valset, hps):
             os.makedirs(os.path.join(hps.save_root, "train"))
     else:
         logger.info("[INFO] Create new model for training...")
-        if os.path.exists(train_dir): shutil.rmtree(train_dir)
+        if os.path.exists(train_dir):
+            shutil.rmtree(train_dir)
         os.makedirs(train_dir)
 
     try:
@@ -88,19 +90,17 @@ def setup_training(model, train_loader, valid_loader, valset, hps):
 
 def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
     '''  Repeatedly runs training iterations, logging loss to screen and log files
-    
         :param model: the model
         :param train_loader: train dataset loader
         :param valid_loader: valid dataset loader
         :param valset: valid dataset which includes text and summary
         :param hps: hps for model
         :param train_dir: where to save checkpoints
-        :return: 
+        :return:
     '''
     logger.info("[INFO] Starting run_training")
 
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=hps.lr)
-
 
     criterion = torch.nn.CrossEntropyLoss(reduction='none')
 
@@ -120,17 +120,16 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             iter_start_time = time.time()
             model.train()
 
-
             time1 = time.time()
             if hps.cuda:
                 G = G_cpu.to(torch.device("cuda"))
             time2 = time.time()
             logger.debug('[DEBUG] iter %d,  transfer data to cuda: time %.5f' % (iters_elapsed, (time2-time1)))
-            
+
             outputs = model.forward(G)  # [n_snodes, 2]
             time3 = time.time()
             logger.debug('[DEBUG] iter %d, forward graph G: time %.5f' % (iters_elapsed, (time3-time2)))
-            
+
             snode_id = G.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
             if hps.model == 'HDSG':
                 snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
@@ -171,7 +170,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                             logger.debug(name)
                             logger.debug(param.grad.data.sum())
                 logger.info('       | end of iter {:3d} | time: {:5.2f}s | train loss {:5.4f} | '
-                                .format(iters_elapsed, (time.time() - iter_start_time),float(train_loss / 100)))
+                            .format(iters_elapsed, (time.time() - iter_start_time), float(train_loss / 100)))
                 writer.add_scalar('loss/train_loss', train_loss, iters_elapsed)
                 train_loss = 0.0
 
@@ -183,7 +182,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                     save_model(model, os.path.join(train_dir, "earlystop"))
                     return
             time6 = time.time()
-            logging.debug('[DEBUG] iter %d, total time %.5f' % (iters_elapsed, (time6-iter_start_time)))
+            logger.debug('[DEBUG] iter %d, total time %.5f' % (iters_elapsed, (time6-iter_start_time)))
 
         if hps.lr_descent:
             new_lr = max(5e-6, hps.lr / (epoch + 1))
@@ -206,8 +205,9 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             save_model(model, os.path.join(train_dir, "earlystop"))
             sys.exit(1)
 
+
 def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed):
-    ''' 
+    '''
         Repeatedly runs eval iterations, logging to screen and writing summaries. Saves the model with the best loss seen so far.
         :param model: the model
         :param loader: valid dataset loader
@@ -217,11 +217,12 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
         :param best_F: best valid F so far
         :param non_descent_cnt: the number of non descent epoch (for early stop)
         :param saveNo: the number of saved models (always keep best saveNo checkpoints)
-        :return: 
+        :return:
     '''
     logger.info("[INFO] Starting eval for this model ...")
     eval_dir = os.path.join(hps.save_root, "eval")  # make a subdir of the root dir for eval data
-    if not os.path.exists(eval_dir): os.makedirs(eval_dir)
+    if not os.path.exists(eval_dir):
+        os.makedirs(eval_dir)
 
     model.eval()
 
@@ -244,11 +245,11 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
     logger.info('[INFO] End of valid | time: {:5.2f}s | valid loss {:5.4f} | ' .format((time.time() - iter_start_time), float(running_avg_loss)))
 
     res = "Rouge1:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
-    scores_all['rouge-1']['p'], scores_all['rouge-1']['r'], scores_all['rouge-1']['f']) \
-          + "Rouge2:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
-    scores_all['rouge-2']['p'], scores_all['rouge-2']['r'], scores_all['rouge-2']['f']) \
-          + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
-    scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
+        scores_all['rouge-1']['p'], scores_all['rouge-1']['r'], scores_all['rouge-1']['f']) \
+        + "Rouge2:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
+        scores_all['rouge-2']['p'], scores_all['rouge-2']['r'], scores_all['rouge-2']['f']) \
+        + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
+        scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
     logger.info(res)
 
     writer.add_scalar('eval_rouge/1_p', scores_all['rouge-1']['p'], iters_elapsed)
@@ -301,8 +302,8 @@ def main():
     parser = argparse.ArgumentParser(description='HeterSumGraph Model')
 
     # Where to find data
-    parser.add_argument('--data_dir', type=str, default='data/CNNDM',help='The dataset directory.')
-    parser.add_argument('--cache_dir', type=str, default='cache/CNNDM',help='The processed dataset directory')
+    parser.add_argument('--data_dir', type=str, default='data/CNNDM', help='The dataset directory.')
+    parser.add_argument('--cache_dir', type=str, default='cache/CNNDM', help='The processed dataset directory')
     parser.add_argument('--embedding_path', type=str, default='/remote-home/dqwang/Glove/glove.42B.300d.txt', help='Path expression to external word embedding.')
 
     # Important settings
@@ -319,14 +320,14 @@ def main():
     parser.add_argument('--eval_num_workers', type=int, default=1, help='num of workers of DataLoader. [default: 4]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU ID to use. [default: 0]')
     parser.add_argument('--cuda', action='store_true', default=False, help='GPU or CPU [default: False]')
-    parser.add_argument('--vocab_size', type=int, default=50000,help='Size of vocabulary. [default: 50000]')
+    parser.add_argument('--vocab_size', type=int, default=50000, help='Size of vocabulary. [default: 50000]')
     parser.add_argument('--n_epochs', type=int, default=20, help='Number of epochs [default: 20]')
     parser.add_argument('--batch_size', type=int, default=32, help='Mini batch size [default: 32]')
     parser.add_argument('--n_iter', type=int, default=1, help='iteration hop [default: 1]')
 
     parser.add_argument('--word_embedding', action='store_true', default=True, help='whether to use Word embedding [default: True]')
     parser.add_argument('--word_emb_dim', type=int, default=300, help='Word embedding size [default: 300]')
-    parser.add_argument('--embed_train', action='store_true', default=False,help='whether to train Word embedding [default: False]')
+    parser.add_argument('--embed_train', action='store_true', default=False, help='whether to train Word embedding [default: False]')
     parser.add_argument('--feat_embed_size', type=int, default=50, help='feature embedding size [default: 50]')
     parser.add_argument('--n_layers', type=int, default=1, help='Number of GAT layers [default: 1]')
     parser.add_argument('--lstm_hidden_state', type=int, default=128, help='size of lstm hidden state [default: 128]')
@@ -334,14 +335,14 @@ def main():
     parser.add_argument('--bidirectional', action='store_true', default=True, help='whether to use bidirectional LSTM [default: True]')
     parser.add_argument('--n_feature_size', type=int, default=128, help='size of node feature [default: 128]')
     parser.add_argument('--hidden_size', type=int, default=64, help='hidden size [default: 64]')
-    parser.add_argument('--ffn_inner_hidden_size', type=int, default=512,help='PositionwiseFeedForward inner hidden size [default: 512]')
+    parser.add_argument('--ffn_inner_hidden_size', type=int, default=512, help='PositionwiseFeedForward inner hidden size [default: 512]')
     parser.add_argument('--n_head', type=int, default=8, help='multihead attention number [default: 8]')
-    parser.add_argument('--recurrent_dropout_prob', type=float, default=0.1,help='recurrent dropout prob [default: 0.1]')
+    parser.add_argument('--recurrent_dropout_prob', type=float, default=0.1, help='recurrent dropout prob [default: 0.1]')
     parser.add_argument('--atten_dropout_prob', type=float, default=0.1, help='attention dropout prob [default: 0.1]')
-    parser.add_argument('--ffn_dropout_prob', type=float, default=0.1,help='PositionwiseFeedForward dropout prob [default: 0.1]')
-    parser.add_argument('--use_orthnormal_init', action='store_true', default=True,help='use orthnormal init for lstm [default: True]')
+    parser.add_argument('--ffn_dropout_prob', type=float, default=0.1, help='PositionwiseFeedForward dropout prob [default: 0.1]')
+    parser.add_argument('--use_orthnormal_init', action='store_true', default=True, help='use orthnormal init for lstm [default: True]')
     parser.add_argument('--sent_max_len', type=int, default=100, help='max length of sentences (max source text sentence tokens)')
-    parser.add_argument('--doc_max_timesteps', type=int, default=50,help='max length of documents (max timesteps of documents)')
+    parser.add_argument('--doc_max_timesteps', type=int, default=50, help='max length of documents (max timesteps of documents)')
     parser.add_argument('--eval_after_iterations', type=int, default=3000, help='perform eval after n iterations of training')
     parser.add_argument('--report_every', type=int, default=50, help='print information after n iterations of training')
 
@@ -364,14 +365,12 @@ def main():
     occupy_mem = int(int(total)*0.85 - int(used))
     if occupy_mem > 0:
         occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
-        # occupy = occupy.cpu()
         del occupy
     logger.info('[INFO] occupied %d MB' % occupy_mem)
 
-
     # File paths
-    DATA_FILE = os.path.join(args.data_dir, "train.label.jsonl")
-    VALID_FILE = os.path.join(args.data_dir, "val.json")
+    # DATA_FILE = os.path.join(args.data_dir, "train.label.jsonl")
+    # VALID_FILE = os.path.join(args.data_dir, "val.json")
     VOCAL_FILE = os.path.join(args.cache_dir, "vocab")
     LOG_PATH = args.log_root
 

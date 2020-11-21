@@ -19,32 +19,16 @@
 
 """This file contains code to read the train/eval/test data from file and process it, and read the vocab data from file and process it"""
 
-import re
 import os
-from nltk.corpus import stopwords
-
-from itertools import cycle
-import glob
-import copy
-import random
 import time
 import json
-import pickle
-import nltk
-import collections
-from collections import Counter
-from itertools import combinations
-import numpy as np
-from random import shuffle
-
 import torch
 import torch.utils.data
-import torch.nn.functional as F
 
 from tools.logger import logger
 
 import dgl
-from dgl.data.utils import save_graphs, load_graphs
+from dgl.data.utils import load_graphs
 
 
 class IterDataset(torch.utils.data.IterableDataset):
@@ -76,16 +60,22 @@ class ExampleSet():
         self.folder_i = -1
         self.data_no = -1
         self.folder_records = -1
-        logger.info("[INFO] itering train dataset to %d" % hps.start_iteration)
         start_index = hps.start_iteration * hps.batch_size
+        logger.info("[INFO] itering train dataset to %d" % start_index)
         while start_index > 0:
             self.folder_i += 1
-            if self.folder_i > self.graph_data_folder_num:
+            if self.folder_i >= self.graph_data_folder_num:
                 self.folder_i = 0
+            self.folder = os.path.join(self.graph_dir, 'train'+str(self.folder_i))
             self.folder_records = len(os.listdir(self.folder))
+            logger.info("[INFO] fast-forwarding data, folder %d has %d files" % (self.folder_i, self.folder_records))
             if start_index >= self.folder_records:
                 start_index -= self.folder_records
+                self.data_no += self.folder_records
+            else:
+                break
         self.graph_i = start_index - 1
+        self.data_no += self.graph_i
         logger.info("[INFO] starting at: data_no=%d, folder_i=%d, graph_i=%d" % (self.data_no, self.folder_i, self.graph_i))
 
     def __next__(self):
@@ -102,21 +92,27 @@ class ExampleSet():
                 self.folder_records = len(os.listdir(self.folder))
             if self.data_no % self.num_workers == self.worker_id:
                 break
-        time2 = time.time()
-        logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
         try:
             graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
             graph = graphs[0]
+
             # filter erroneous graphs which may cause exception
-            graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-            graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+            meta = {}
+            meta['dtype_0'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 0)
+            meta['dtype_1'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            meta['unit_0'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 0)
+            meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
             if self.hps.model == 'HDSG':
-                graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
-            return graph, self.data_no
+                meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
+                meta['dtype_2'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 2)
         except Exception as e:
             logger.warning('[WARNING] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
             logger.warning(str(e))
             return self.__next__()
+
+        time2 = time.time()
+        logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
+        return graph, self.data_no
 
 
 class Example():
@@ -153,11 +149,12 @@ class MapDataset(torch.utils.data.Dataset):
         try:
             graphs, labels = load_graphs(os.path.join(self.hps.cache_dir, 'graph', self.mode, str(index)+'.bin'))
             graph = graphs[0]
+            meta = {}
             # filter erroneous graphs which may cause exception
-            graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-            graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+            meta['dtype_1'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
             if self.hps.model == 'HDSG':
-                graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
+                meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
             return graph, index
         except Exception as e:
             logger.warning('[WARNING] failed reading graph %d.' % (index))
@@ -182,7 +179,7 @@ def readJson(fname):
 def graph_collate_fn(samples):
     '''
     :param batch: (G, input_pad)
-    :return: 
+    :return:
     '''
     graphs, index = map(list, zip(*samples))
     graph_len = [len(g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)) for g in graphs]  # sent node of graph

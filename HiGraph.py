@@ -17,6 +17,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import time
 import numpy as np
 
 import torch
@@ -163,8 +164,6 @@ class HSumGraph(nn.Module):
         return node_feature
 
 
-
-
 class HSumDocGraph(HSumGraph):
     """
         without sent2sent and add residual connection
@@ -189,10 +188,12 @@ class HSumDocGraph(HSumGraph):
                 sent2doc: type=2
         :return: result: [sentnum, 2]
         """
-
+        time1 = time.time()
         snode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
         dnode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 2)
         supernode_id = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+        time2 = time.time()
+        logger.debug("[DEBUG] find node: time %.5f" % (time2-time1))
 
         # word node init
         word_feature = self.set_wnfeature(graph)    # [wnode, embed_size]
@@ -208,22 +209,21 @@ class HSumDocGraph(HSumGraph):
         word_state = word_feature
         sent_state = graph.nodes[supernode_id].data["init_feature"]
         sent_state = self.word2sent(graph, word_state, sent_state)
+        time3 = time.time()
+        logger.debug("[DEBUG] init node: time %.5f" % (time3-time2))
 
         for i in range(self._n_iter):
+            time4 = time.time()
             # sent -> word
             word_state = self.sent2word(graph, word_state, sent_state)
+            time5 = time.time()
+            logger.debug("[DEBUG] sent2word: time %.5f" % (time5-time4))
             # word -> sent
             sent_state = self.word2sent(graph, word_state, sent_state)
+            time6 = time.time()
+            logger.debug("[DEBUG] word2sent: time %.5f" % (time6-time5))
 
         graph.nodes[supernode_id].data["hidden_state"] = sent_state
-
-        # extract sentence nodes
-        def nodes_for_extractable_sentence(nodes):
-            node_features = (nodes.data['dtype'] == 1).squeeze(1)
-            print(node_features, node_features.size())
-            node_features = node_features + (nodes.data['extractable'] == 1).squeeze(1)
-            print(node_features, node_features.size())
-            return (node_features == 2)
 
         extractable_snode_id = graph.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
         extractable_snode_id = graph.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=extractable_snode_id)
@@ -237,6 +237,8 @@ class HSumDocGraph(HSumGraph):
 
         s_state = torch.cat(s_state_list, dim=0)
         result = self.wh(s_state)
+        time7 = time.time()
+        logger.debug("[DEBUG] output: time %.5f" % (time7-time6))
         return result
 
 
