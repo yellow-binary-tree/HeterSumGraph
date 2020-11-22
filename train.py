@@ -190,9 +190,8 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                 param_group['lr'] = new_lr
             logger.info("[INFO] The learning rate now is %f", new_lr)
 
-        epoch_avg_loss = epoch_loss / len(train_loader)
-        logger.info('   | end of epoch {:3d} | time: {:5.2f}s | epoch train loss {:5.4f} | '
-                    .format(epoch, (time.time() - epoch_start_time), float(epoch_avg_loss)))
+        logger.info('   | end of epoch {:3d} | time: {:5.2f}s | '
+                    .format(epoch, (time.time() - epoch_start_time)))
 
         if not best_train_loss or epoch_avg_loss < best_train_loss:
             save_file = os.path.join(train_dir, "bestmodel")

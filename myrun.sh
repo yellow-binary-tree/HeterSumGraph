@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash run.sh run HSG winsize1 1 0 > HSG_1122.log 2>&1 &
+# nohup bash myrun.sh run HSG winsize1_force_cut 1 3 > HSGfc_1122.log 2>&1 &
 
 mode=$1
 model=$2
@@ -10,13 +10,13 @@ winsize=$4
 gpu=$5
 
 if [ $winsize == 1 ]; then
-    doc_max_timesteps=70
+    doc_max_timesteps=30
 elif [ $winsize == 3 ]; then
-    doc_max_timesteps=150
+    doc_max_timesteps=70
 elif [ $winsize == 5 ]; then
-    doc_max_timesteps=230
+    doc_max_timesteps=110
 elif [ $winsize == 7 ]; then
-    doc_max_timesteps=310
+    doc_max_timesteps=150
 fi
 
 batch_size=16
@@ -28,7 +28,8 @@ if [ $mode == 'debug' ]; then
     echo 'run.sh: train in debug mode '$model $dataset $winsize $gpu
     CUDA_LAUNCH_BLOCKING=1 python -u train.py \
         --model $model \
-        --data_dir data/$dataset --cache_dir cache/$dataset \
+        --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
+        --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \
         --n_feature_size 8 --hidden_size 8 --ffn_inner_hidden_size 8 --lstm_hidden_state 8 \
         --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
@@ -40,7 +41,8 @@ elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $winsize $gpu
     python -u train.py \
         --model $model \
-        --data_dir data/$dataset --cache_dir cache/$dataset \
+        --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
+        --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \
         --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size \
