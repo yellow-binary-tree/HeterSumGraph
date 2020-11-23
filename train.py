@@ -35,6 +35,8 @@ from Tester import SLTester
 from module.dataloader import IterDataset, MapDataset, graph_collate_fn
 from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
+import logging
+from tools.logger import logger
 from tools.logger import *
 
 from tensorboardX import SummaryWriter
@@ -112,10 +114,12 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
     iters_elapsed = hps.start_iteration
 
     for epoch in range(1, hps.n_epochs + 1):
+        iters_elapsed_in_epoch = 0
         epoch_loss = 0.0
         train_loss = 0.0
         epoch_start_time = time.time()
         for i, (G_cpu, index) in enumerate(train_loader):
+            iters_elapsed_in_epoch += 1
             iters_elapsed += 1
             iter_start_time = time.time()
             model.train()
@@ -174,14 +178,15 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                 writer.add_scalar('loss/train_loss', train_loss, iters_elapsed)
                 train_loss = 0.0
 
-            if iters_elapsed % hps.eval_after_iterations == 0:
-                save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
-                best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed)
-                if non_descent_cnt >= 3:
-                    logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
-                    save_model(model, os.path.join(train_dir, "earlystop"))
-                    return
-            time6 = time.time()
+            if iters_elapsed != 0:
+                if iters_elapsed % hps.eval_after_iterations == 0:
+                    save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
+                    best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed)
+                    if non_descent_cnt >= 3:
+                        logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
+                        save_model(model, os.path.join(train_dir, "earlystop"))
+                        return
+                time6 = time.time()
             logger.debug('[DEBUG] iter %d, total time %.5f' % (iters_elapsed, (time6-iter_start_time)))
 
         if hps.lr_descent:
@@ -190,8 +195,18 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                 param_group['lr'] = new_lr
             logger.info("[INFO] The learning rate now is %f", new_lr)
 
-        logger.info('   | end of epoch {:3d} | time: {:5.2f}s | '
-                    .format(epoch, (time.time() - epoch_start_time)))
+        epoch_avg_loss = epoch_loss / (iters_elapsed_in_epoch * hps.batch_size)
+        logger.info('   | end of epoch {:3d} | time: {:5.2f}s | epoch loss: {:5.2f}'
+                    .format(epoch, (time.time() - epoch_start_time), epoch_avg_loss))
+
+        if hps.eval_after_iterations == 0:
+            # evaluate per epoch
+            save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
+            best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed)
+            if non_descent_cnt >= 3:
+                logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
+                save_model(model, os.path.join(train_dir, "earlystop"))
+                return
 
         if not best_train_loss or epoch_avg_loss < best_train_loss:
             save_file = os.path.join(train_dir, "bestmodel")
