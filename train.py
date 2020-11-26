@@ -375,7 +375,8 @@ def main():
     # occupy gpu
     devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
     total, used = devices_info[int(args.gpu)].split(',')
-    occupy_mem = int(int(total)*0.85 - int(used))
+    # occupy_mem = int(int(total)*0.85 - int(used))
+    occupy_mem = int(int(total)*0.4)
     if occupy_mem > 0:
         occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
         del occupy

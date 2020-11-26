@@ -23,7 +23,7 @@ elif [ $winsize == 7 ]; then
 fi
 
 batch_size=16
-eval_iter=$(( 151000/$batch_size ))
+eval_iter=$(( 151000/3/$batch_size ))       # eval 3 times per iteration
 
 time=$(date "+%Y%m%d_%H%M%S")
 
