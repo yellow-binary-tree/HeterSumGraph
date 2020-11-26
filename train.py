@@ -36,8 +36,7 @@ from module.dataloader import IterDataset, MapDataset, graph_collate_fn
 from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
 import logging
-from tools.logger import logger
-from tools.logger import *
+from tools.logger import logger, formatter
 
 from tensorboardX import SummaryWriter
 
@@ -264,7 +263,7 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
         scores_all['rouge-2']['p'], scores_all['rouge-2']['r'], scores_all['rouge-2']['f']) \
         + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (
         scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
-    logger.info(res)
+    logger.info('\n' + res)
 
     writer.add_scalar('eval_rouge/1_p', scores_all['rouge-1']['p'], iters_elapsed)
     writer.add_scalar('eval_rouge/1_r', scores_all['rouge-1']['r'], iters_elapsed)
@@ -383,8 +382,6 @@ def main():
     logger.info('[INFO] occupied %d MB' % occupy_mem)
 
     # File paths
-    # DATA_FILE = os.path.join(args.data_dir, "train.label.jsonl")
-    # VALID_FILE = os.path.join(args.data_dir, "val.json")
     VOCAL_FILE = os.path.join(args.cache_dir, "vocab")
     LOG_PATH = args.log_root
 

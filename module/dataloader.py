@@ -38,6 +38,7 @@ class IterDataset(torch.utils.data.IterableDataset):
         """ Initializes the IterDataset with the path of data
         """
         self.hps = hps
+        self.first_iter = True
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
@@ -46,11 +47,19 @@ class IterDataset(torch.utils.data.IterableDataset):
         else:
             num_workers, worker_id = worker_info.num_workers, worker_info.id
         graph_dir = os.path.join(self.hps.cache_dir, 'graph')
-        return ExampleSet(num_workers, worker_id, graph_dir, self.hps)
+        if self.first_iter:
+            self.first_iter = False
+            logger.info("init the train dataset for the first time")
+            # need to fast forward training data if the training procesjust begins
+            return ExampleSet(num_workers, worker_id, graph_dir, self.hps, fast_woward=True)
+        else:
+            logger.info("init the train dataset not for the first time")
+            # else, no need to ff data, start from the first data
+            return ExampleSet(num_workers, worker_id, graph_dir, self.hps)
 
 
 class ExampleSet():
-    def __init__(self, num_workers, worker_id, graph_dir, hps):
+    def __init__(self, num_workers, worker_id, graph_dir, hps, fast_woward=False):
         self.num_workers = num_workers
         self.worker_id = worker_id
         self.graph_dir = graph_dir
@@ -58,22 +67,24 @@ class ExampleSet():
         self.folder = None
         self.hps = hps
         self.folder_i = -1
-        self.data_no = -1
+        self.data_no = 0
         self.folder_records = -1
-        start_index = hps.start_iteration * hps.batch_size
-        logger.info("[INFO] itering train dataset to %d" % start_index)
-        while start_index > 0:
-            self.folder_i += 1
-            if self.folder_i >= self.graph_data_folder_num:
-                self.folder_i = 0
-            self.folder = os.path.join(self.graph_dir, 'train'+str(self.folder_i))
-            self.folder_records = len(os.listdir(self.folder))
-            logger.info("[INFO] fast-forwarding data, folder %d has %d files" % (self.folder_i, self.folder_records))
-            if start_index >= self.folder_records:
-                start_index -= self.folder_records
-                self.data_no += self.folder_records
-            else:
-                break
+        start_index = 0
+        if fast_woward:
+            start_index = hps.start_iteration * hps.batch_size
+            logger.info("[INFO] fast-fowarding train dataset to %d" % start_index)
+            while start_index > 0:
+                self.folder_i += 1
+                if self.folder_i >= self.graph_data_folder_num:
+                    self.folder_i = 0
+                self.folder = os.path.join(self.graph_dir, 'train'+str(self.folder_i))
+                self.folder_records = len(os.listdir(self.folder))
+                logger.info("[INFO] fast-forwarding data, folder %d has %d files" % (self.folder_i, self.folder_records))
+                if start_index >= self.folder_records:
+                    start_index -= self.folder_records
+                    self.data_no += self.folder_records
+                else:
+                    break
         self.graph_i = start_index - 1
         self.data_no += self.graph_i
         logger.info("[INFO] starting at: data_no=%d, folder_i=%d, graph_i=%d" % (self.data_no, self.folder_i, self.graph_i))
@@ -119,9 +130,7 @@ class Example():
     def __init__(self, summary, ori_text):
         self.original_abstract = "\n".join(summary)
         if isinstance(ori_text, list) and isinstance(ori_text[0], list):
-            self.original_article_sents = []
-            for chap in ori_text:
-                self.original_article_sents.extend(chap)
+            self.original_article_sents = ori_text[len(ori_text)//2]        # only the center chapter can be extracted
         else:
             self.original_article_sents = ori_text
 

@@ -20,20 +20,21 @@
 import argparse
 import datetime
 import os
+import sys
 import time
 import json
 
 import torch
-import torch.nn as nn
 from rouge import Rouge
 
 from HiGraph import HSumGraph, HSumDocGraph
 from Tester import SLTester
-from module.dataloader import ExampleSet, MultiExampleSet, graph_collate_fn
+from module.dataloader import MapDataset, graph_collate_fn
 from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
 from tools import utils
-from tools.logger import *
+import logging
+from tools.logger import logger, formatter
 
 
 def load_test_model(model, model_name, eval_dir, save_root):
@@ -59,42 +60,49 @@ def load_test_model(model, model_name, eval_dir, save_root):
     return model
 
 
-
 def run_test(model, dataset, loader, model_name, hps):
-    test_dir = os.path.join(hps.save_root, "test") # make a subdir of the root dir for eval data
+    test_dir = os.path.join(hps.save_root, "test")      # make a subdir of the root dir for eval data
     eval_dir = os.path.join(hps.save_root, "eval")
-    if not os.path.exists(test_dir) : os.makedirs(test_dir)
-    if not os.path.exists(eval_dir) :
+    if not os.path.exists(test_dir):
+        os.makedirs(test_dir)
+    if not os.path.exists(eval_dir):
         logger.exception("[Error] eval_dir %s doesn't exist. Run in train mode to create it.", eval_dir)
         raise Exception("[Error] eval_dir %s doesn't exist. Run in train mode to create it." % (eval_dir))
 
     resfile = None
     if hps.save_label:
         log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1])
-        resfile = open(log_dir, "w")
-        logger.info("[INFO] Write the Evaluation into %s", log_dir)
+        resfile = open(log_dir, "w", encoding='utf-8')
+        logger.info("[INFO] Write the decode result into %s", log_dir)
 
     model = load_test_model(model, model_name, eval_dir, hps.save_root)
     model.eval()
 
-    iter_start_time=time.time()
+    iter_start_time = time.time()
     with torch.no_grad():
         logger.info("[Model] Sequence Labeling!")
-        tester = SLTester(model, hps.m, limited=hps.limited, test_dir=test_dir)
+        tester = SLTester(model, hps, test_dir=test_dir, limited=hps.limited)
 
         for i, (G, index) in enumerate(loader):
             if hps.cuda:
                 G.to(torch.device("cuda"))
-            tester.evaluation(G, index, dataset, blocking=hps.blocking)
+
+            pred_idxs, hypss, refers = tester.evaluation(G, index, dataset, blocking=hps.blocking)
+
+            if hps.save_label:
+                for i, pred_idx, hyps, refer in zip(index, pred_idxs, hypss, refers):
+                    resfile.write(json.dumps(
+                        {'index': i, 'pred_idx': pred_idx, 'hyps': hyps, 'refer': refer},
+                        ensure_ascii=False) + '\n')
 
     running_avg_loss = tester.running_avg_loss
 
-    if hps.save_label:
-        # save label and do not calculate rouge
-        json.dump(tester.extractLabel, resfile)
-        tester.SaveDecodeFile()
-        logger.info('   | end of test | time: {:5.2f}s | '.format((time.time() - iter_start_time)))
-        return
+    # if hps.save_label:
+    #     save label and do not calculate rouge
+    #     json.dump(tester.extractLabel, resfile)
+    #     tester.SaveDecodeFile()
+    #     logger.info('   | end of test | time: {:5.2f}s | '.format((time.time() - iter_start_time)))
+    #     return
 
     logger.info("The number of pairs is %d", tester.rougePairNum)
     if not tester.rougePairNum:
@@ -112,14 +120,13 @@ def run_test(model, dataset, loader, model_name, hps):
         scores_all = rouge.get_scores(tester.hyps, tester.refer, avg=True)
 
     res = "Rouge1:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (scores_all['rouge-1']['p'], scores_all['rouge-1']['r'], scores_all['rouge-1']['f']) \
-            + "Rouge2:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (scores_all['rouge-2']['p'], scores_all['rouge-2']['r'], scores_all['rouge-2']['f']) \
-                + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
+        + "Rouge2:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (scores_all['rouge-2']['p'], scores_all['rouge-2']['r'], scores_all['rouge-2']['f']) \
+        + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
     logger.info(res)
 
     tester.getMetric()
-    tester.SaveDecodeFile()
-    logger.info('[INFO] End of test | time: {:5.2f}s | test loss {:5.4f} | '.format((time.time() - iter_start_time),float(running_avg_loss)))
-
+    # tester.SaveDecodeFile()
+    logger.info('[INFO] End of test | time: {:5.2f}s | test loss {:5.4f} | '.format((time.time() - iter_start_time), float(running_avg_loss)))
 
 
 def main():
@@ -134,6 +141,7 @@ def main():
     parser.add_argument('--model', type=str, default="HSumGraph", help="model structure[HSG|HDSG]")
     parser.add_argument('--test_model', type=str, default='evalbestmodel', help='choose different model to test [multi/evalbestmodel/trainbestmodel/earlystop]')
     parser.add_argument('--use_pyrouge', action='store_true', default=False, help='use_pyrouge')
+    parser.add_argument('--num_workers', default=0, help='num_workers of the dataset')
 
     # Where to save output
     parser.add_argument('--save_root', type=str, default='save/', help='Root directory for all model.')
@@ -160,7 +168,7 @@ def main():
     parser.add_argument('--ffn_inner_hidden_size', type=int, default=512, help='PositionwiseFeedForward inner hidden size [default: 512]')
     parser.add_argument('--n_head', type=int, default=8, help='multihead attention number [default: 8]')
     parser.add_argument('--recurrent_dropout_prob', type=float, default=0.1, help='recurrent dropout prob [default: 0.1]')
-    parser.add_argument('--atten_dropout_prob', type=float, default=0.1,help='attention dropout prob [default: 0.1]')
+    parser.add_argument('--atten_dropout_prob', type=float, default=0.1, help='attention dropout prob [default: 0.1]')
     parser.add_argument('--ffn_dropout_prob', type=float, default=0.1, help='PositionwiseFeedForward dropout prob [default: 0.1]')
     parser.add_argument('--use_orthnormal_init', action='store_true', default=True, help='use orthnormal init for lstm [default: true]')
     parser.add_argument('--sent_max_len', type=int, default=100, help='max length of sentences (max source text sentence tokens)')
@@ -170,24 +178,20 @@ def main():
     parser.add_argument('--blocking', action='store_true', default=False, help='ngram blocking')
 
     parser.add_argument('-m', type=int, default=3, help='decode summary length')
-
-
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     torch.set_printoptions(threshold=50000)
 
     # File paths
-    DATA_FILE = os.path.join(args.data_dir, "test.label.jsonl")
     VOCAL_FILE = os.path.join(args.cache_dir, "vocab")
-    FILTER_WORD = os.path.join(args.cache_dir, "filter_word.txt")
     LOG_PATH = args.log_root
 
     # train_log setting
     if not os.path.exists(LOG_PATH):
         logger.exception("[Error] Logdir %s doesn't exist. Run in train mode to create it.", LOG_PATH)
         raise Exception("[Error] Logdir %s doesn't exist. Run in train mode to create it." % (LOG_PATH))
-    nowTime=datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    nowTime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     log_path = os.path.join(LOG_PATH, "test_" + nowTime)
     file_handler = logging.FileHandler(log_path)
     file_handler.setFormatter(formatter)
@@ -207,21 +211,20 @@ def main():
     hps = args
     logger.info(hps)
 
-    test_w2s_path = os.path.join(args.cache_dir, "test.w2s.tfidf.jsonl")
     if hps.model == "HSG":
         model = HSumGraph(hps, embed)
         logger.info("[MODEL] HeterSumGraph ")
-        dataset = ExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, test_w2s_path)
-        loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=True, num_workers=32,collate_fn=graph_collate_fn)
     elif hps.model == "HDSG":
         model = HSumDocGraph(hps, embed)
         logger.info("[MODEL] HeterDocSumGraph ")
-        test_w2d_path = os.path.join(args.cache_dir, "test.w2d.tfidf.jsonl")
-        dataset = MultiExampleSet(DATA_FILE, vocab, hps.doc_max_timesteps, hps.sent_max_len, FILTER_WORD, test_w2s_path, test_w2d_path)
-        loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=True, num_workers=32,collate_fn=graph_collate_fn)
     else:
         logger.error("[ERROR] Invalid Model Type!")
         raise NotImplementedError("Model Type has not been implemented")
+
+    # HINT: now we are trying to decode val data
+    # change dataset mode to "test" if you want to decode test data.
+    dataset = MapDataset(hps, mode='val')
+    loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.num_workers, pin_memory=True)
 
     if args.cuda:
         model.to(torch.device("cuda:0"))
@@ -234,6 +237,7 @@ def main():
             run_test(model, dataset, loader, model_name, hps)
     else:
         run_test(model, dataset, loader, hps.test_model, hps)
+
 
 if __name__ == '__main__':
     main()

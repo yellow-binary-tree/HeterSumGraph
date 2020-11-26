@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash myrun.sh run HSG winsize1_force_cut 1 3 > HSGfc_1122.log 2>&1 &
+# nohup bash myrun.sh run HDSG winsize3_force_cut 3 1 > HDSGfc3_restore_1123.log 2>&1 &
 
 mode=$1
 model=$2
@@ -9,14 +9,17 @@ dataset=$3
 winsize=$4
 gpu=$5
 
+test_save_path=$6
+test_model=$7
+
 if [ $winsize == 1 ]; then
     doc_max_timesteps=30
 elif [ $winsize == 3 ]; then
-    doc_max_timesteps=70
+    doc_max_timesteps=50
 elif [ $winsize == 5 ]; then
-    doc_max_timesteps=110
+    doc_max_timesteps=70
 elif [ $winsize == 7 ]; then
-    doc_max_timesteps=150
+    doc_max_timesteps=90
 fi
 
 batch_size=16
@@ -50,6 +53,17 @@ elif [ $mode == 'run' ]; then
         --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \
         --train_num_workers 0 --eval_num_workers 0 \
         --cuda --gpu $gpu
+elif [ $mode == 'test' ]; then
+    echo 'run.sh: test '$model $dataset $winsize $gpu
+    python -u evaluation.py \
+        --model $model \
+        --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
+        --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
+        --save_root save/$test_save_path --log_root log/ --test_model $test_model \
+        --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
+        --vocab_size 100000 --batch_size $batch_size \
+        --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps -m 5 \
+        --save_label --cuda --gpu $gpu
 else
     echo 'please select a run mode: debug / run'
 fi
