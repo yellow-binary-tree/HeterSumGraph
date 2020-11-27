@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash myrun.sh run HDSG winsize3_force_cut 3 1 > HDSGfc3_restore_1123.log 2>&1 &
+# nohup bash myrun.sh run HDSG winsize3_bow_cut 3 6 > HDSGfc3_1126.log 2>&1 &
 
 mode=$1
 model=$2
@@ -36,14 +36,14 @@ if [ $mode == 'debug' ]; then
         --save_root save/$time --log_root log \
         --n_feature_size 8 --hidden_size 8 --ffn_inner_hidden_size 8 --lstm_hidden_state 8 \
         --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
-        --vocab_size 100000 --batch_size 1 \
+        --vocab_size 100000 --batch_size 4 \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
         --lr_descent --grad_clip -m 5 --eval_after_iterations 100 \
         --cuda --gpu $gpu
 elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $winsize $gpu
     python -u train.py \
-        --model $model \
+        --model $model --exp_name myHeterSumGraph_${model}_${dataset}_${time} \
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \

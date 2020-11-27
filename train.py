@@ -40,6 +40,11 @@ from tools.logger import logger, formatter
 
 from tensorboardX import SummaryWriter
 
+# exp_uploader
+sys.path.append('/share/wangyq/tools/')
+import exp_uploader
+import rouge_server
+
 logger.debug('[DEBUG] logging in debug mode.')
 
 nowTime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -105,6 +110,10 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
 
     criterion = torch.nn.CrossEntropyLoss(reduction='none')
 
+    # exp_uploader
+    exp = exp_uploader.Exp(proj_name=hps.proj_name, exp_name=hps.exp_name, command=str(hps))
+    exp_uploader.init_exp(exp)
+
     best_train_loss = None
     best_loss = None
     best_F = None
@@ -165,6 +174,9 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
 
             train_loss += float(loss.data)
             epoch_loss += float(loss.data)
+            
+            if iters_elapsed % 20 == 0:
+                exp_uploader.async_heart_beat(exp, loss=float(loss.data), global_step=iters_elapsed)
 
             if iters_elapsed % hps.report_every == 0:
                 if _DEBUG_FLAG_:
@@ -177,15 +189,14 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                 writer.add_scalar('loss/train_loss', train_loss, iters_elapsed)
                 train_loss = 0.0
 
-            if iters_elapsed != 0:
-                if iters_elapsed % hps.eval_after_iterations == 0:
-                    save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
-                    best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed)
-                    if non_descent_cnt >= 3:
-                        logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
-                        save_model(model, os.path.join(train_dir, "earlystop"))
-                        return
-                time6 = time.time()
+            if iters_elapsed % hps.eval_after_iterations == 0:
+                save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
+                best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed, exp)
+                if non_descent_cnt >= 3:
+                    logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
+                    save_model(model, os.path.join(train_dir, "earlystop"))
+                    return
+            time6 = time.time()
             logger.debug('[DEBUG] iter %d, total time %.5f' % (iters_elapsed, (time6-iter_start_time)))
 
         if hps.lr_descent:
@@ -219,7 +230,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             sys.exit(1)
 
 
-def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed):
+def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed, exp):
     '''
         Repeatedly runs eval iterations, logging to screen and writing summaries. Saves the model with the best loss seen so far.
         :param model: the model
@@ -242,17 +253,27 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
     iter_start_time = time.time()
 
     with torch.no_grad():
-        tester = SLTester(model, hps)
+        tester = SLTester(model, hps, exp)
         for i, (G, index) in enumerate(loader):
             if hps.cuda:
                 G.to(torch.device("cuda"))
-            tester.evaluation(G, index, valset)
+            tester.evaluation(G, index, valset, exp=exp)
 
     running_avg_loss = tester.running_avg_loss
 
     if len(tester.hyps) == 0 or len(tester.refer) == 0:
         logger.error("During testing, no hyps is selected!")
         return
+
+    if hps.use_exp_rouge:
+        exp_server_hyps = [chap.split('\n') for chap in tester.hyps]
+        exp_server_refer = [chap.split('\n') for chap in tester.refer]
+        logger.debug('[HYPS]')
+        logger.debug(exp_server_hyps)
+        logger.debug('[REFER]')
+        logger.debug(exp_server_refer)
+        rouge_server.eval_rouge(hps.proj_name, hps.exp_name, 'decode_test_ckpt-{}'.format(iters_elapsed), exp_server_hyps, exp_server_refer)
+
     rouge = Rouge()
     scores_all = rouge.get_scores(tester.hyps, tester.refer, avg=True)
     logger.info('[INFO] End of valid | time: {:5.2f}s | valid loss {:5.4f} | ' .format((time.time() - iter_start_time), float(running_avg_loss)))
@@ -329,8 +350,8 @@ def main():
     parser.add_argument('--log_root', type=str, default='log/', help='Root directory for all logging.')
 
     # Hyperparameters
-    parser.add_argument('--train_num_workers', type=int, default=1, help='num of workers of DataLoader. [default: 4]')
-    parser.add_argument('--eval_num_workers', type=int, default=1, help='num of workers of DataLoader. [default: 4]')
+    parser.add_argument('--train_num_workers', type=int, default=0, help='num of workers of DataLoader. [default: 4]')
+    parser.add_argument('--eval_num_workers', type=int, default=0, help='num of workers of DataLoader. [default: 4]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU ID to use. [default: 0]')
     parser.add_argument('--cuda', action='store_true', default=False, help='GPU or CPU [default: False]')
     parser.add_argument('--vocab_size', type=int, default=50000, help='Size of vocabulary. [default: 50000]')
@@ -364,8 +385,12 @@ def main():
     parser.add_argument('--lr_descent', action='store_true', default=False, help='learning rate descent')
     parser.add_argument('--grad_clip', action='store_true', default=False, help='for gradient clipping')
     parser.add_argument('--max_grad_norm', type=float, default=1.0, help='for gradient clipping max gradient normalization')
-
     parser.add_argument('-m', type=int, default=3, help='decode summary length')
+
+    # exp_upload
+    parser.add_argument('--proj_name', type=str, default='wyq_structural_summ', help='Project Name')
+    parser.add_argument('--exp_name', type=str, default='myHeterSumGrpah', help='Experiment Name')
+    parser.add_argument('--use_exp_rouge', type=bool, default=True, help='whether send decoded summ to the exp_server to get rouge')
 
     args = parser.parse_args()
 
@@ -375,12 +400,11 @@ def main():
     # occupy gpu
     devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
     total, used = devices_info[int(args.gpu)].split(',')
-    # occupy_mem = int(int(total)*0.85 - int(used))
     occupy_mem = int(int(total)*0.4)
-    if occupy_mem > 0:
+    if int(total)*0.9 - int(used) > occupy_mem:
         occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
         del occupy
-    logger.info('[INFO] occupied %d MB' % occupy_mem)
+        logger.info('[INFO] occupied %d MB' % occupy_mem)
 
     # File paths
     VOCAL_FILE = os.path.join(args.cache_dir, "vocab")

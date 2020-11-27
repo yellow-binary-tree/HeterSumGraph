@@ -2,8 +2,13 @@ import torch
 import dgl
 
 import os
+import sys
 from tools.utils import eval_label
 from tools.logger import logger
+
+# exp_uploader
+sys.path.append('/share/wangyq/tools/')
+import exp_uploader
 
 
 class TestPipLine():
@@ -87,7 +92,7 @@ class SLTester(TestPipLine):
         self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
         self.blocking_win = blocking_win
 
-    def evaluation(self, G, index, dataset, blocking=False):
+    def evaluation(self, G, index, dataset, blocking=False, exp=None):
         """
             :param G: the model
             :param index: list, example id
@@ -114,6 +119,9 @@ class SLTester(TestPipLine):
         glist = dgl.unbatch(G)
 
         for j in range(len(glist)):
+            if j % 20 == 0:
+                exp_uploader.async_heart_beat(exp)
+
             idx = index[j]
             example = dataset.get_example(idx)
             original_article_sents = example.original_article_sents
