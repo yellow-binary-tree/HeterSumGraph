@@ -33,6 +33,7 @@ class TestPipLine():
 
         self._hyps = []
         self._refer = []
+        self._label = []
 
     def evaluation(self, G, index, valset):
         pass
@@ -80,6 +81,10 @@ class TestPipLine():
         return self._refer
 
     @property
+    def label(self):
+        return self._label
+
+    @property
     def extractLabel(self):
         return self.extracts
 
@@ -119,14 +124,13 @@ class SLTester(TestPipLine):
         glist = dgl.unbatch(G)
 
         for j in range(len(glist)):
-            if j % 20 == 0:
-                exp_uploader.async_heart_beat(exp)
 
             idx = index[j]
             example = dataset.get_example(idx)
             original_article_sents = example.original_article_sents
             sent_max_number = len(original_article_sents)
             refer = example.original_abstract
+            labels = example.labels
 
             g = glist[j]
             snode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
@@ -161,7 +165,8 @@ class SLTester(TestPipLine):
 
             self._hyps.append(hyps)
             self._refer.append(refer)
-        return self.extracts[-len(glist):], self._hyps[-len(glist):], self._refer[-len(glist):]
+            self._label.append(labels)
+        return self.extracts[-len(glist):], self._hyps[-len(glist):], self._refer[-len(glist):], self._label[-len(glist):]
 
     def getMetric(self):
         logger.info("[INFO] Validset match_true %d, pred %d, true %d, total %d, match %d",

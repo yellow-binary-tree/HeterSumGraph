@@ -63,7 +63,7 @@ class Vocab(object):
                 self._word_to_id[w] = self._count
                 self._id_to_word[self._count] = w
                 self._count += 1
-                if max_size != 0 and self._count >= max_size:
+                if max_size != 0 and self._count == max_size:
                     logger.info("[INFO] max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count))
                     break
         logger.info("[INFO] Finished constructing vocabulary of %i total words. Last word added: %s", self._count, self._id_to_word[self._count-1])

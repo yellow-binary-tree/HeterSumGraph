@@ -37,6 +37,7 @@ from module.embedding import Word_Embedding
 from module.vocabulary import Vocab
 import logging
 from tools.logger import logger, formatter
+from myutils import result_word2id
 
 from tensorboardX import SummaryWriter
 
@@ -248,8 +249,10 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
     if not os.path.exists(eval_dir):
         os.makedirs(eval_dir)
 
-    model.eval()
+    if hps.use_exp_rouge:
+        test_vocab = Vocab(os.path.join(hps.cache_dir, 'test_vocab'), max_size=-1)
 
+    model.eval()
     iter_start_time = time.time()
 
     with torch.no_grad():
@@ -259,6 +262,9 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
                 G.to(torch.device("cuda"))
             tester.evaluation(G, index, valset, exp=exp)
 
+            if i % 20 == 0:
+                exp_uploader.async_heart_beat(exp)
+
     running_avg_loss = tester.running_avg_loss
 
     if len(tester.hyps) == 0 or len(tester.refer) == 0:
@@ -266,13 +272,10 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
         return
 
     if hps.use_exp_rouge:
-        exp_server_hyps = [chap.split('\n') for chap in tester.hyps]
-        exp_server_refer = [chap.split('\n') for chap in tester.refer]
-        logger.debug('[HYPS]')
-        logger.debug(exp_server_hyps)
-        logger.debug('[REFER]')
-        logger.debug(exp_server_refer)
-        rouge_server.eval_rouge(hps.proj_name, hps.exp_name, 'decode_test_ckpt-{}'.format(iters_elapsed), exp_server_hyps, exp_server_refer)
+        exp_server_hyps, exp_server_refer = result_word2id(
+            test_vocab, [chap.split('\n') for chap in tester.hyps], [chap.split('\n') for chap in tester.refer])
+        rouge_server.eval_rouge(hps.proj_name, hps.exp_name, 'decode_test_ckpt-{}'.format(iters_elapsed),
+                                exp_server_hyps, exp_server_refer)
 
     rouge = Rouge()
     scores_all = rouge.get_scores(tester.hyps, tester.refer, avg=True)

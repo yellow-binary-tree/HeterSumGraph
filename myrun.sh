@@ -56,7 +56,7 @@ elif [ $mode == 'run' ]; then
 elif [ $mode == 'test' ]; then
     echo 'run.sh: test '$model $dataset $winsize $gpu
     python -u evaluation.py \
-        --model $model \
+        --model $model --exp_name myHeterSumGraph_test_${model}_${dataset}\
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$test_save_path --log_root log/ --test_model $test_model \

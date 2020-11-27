@@ -35,6 +35,12 @@ from module.vocabulary import Vocab
 from tools import utils
 import logging
 from tools.logger import logger, formatter
+from myutils import result_word2id
+
+# exp_uploader
+sys.path.append('/share/wangyq/tools/')
+import exp_uploader
+import rouge_server
 
 
 def load_test_model(model, model_name, eval_dir, save_root):
@@ -78,6 +84,12 @@ def run_test(model, dataset, loader, model_name, hps):
     model = load_test_model(model, model_name, eval_dir, hps.save_root)
     model.eval()
 
+    # exp_uploader
+    exp = exp_uploader.Exp(proj_name=hps.proj_name, exp_name=hps.exp_name, command=str(hps))
+    exp_uploader.init_exp(exp)
+    if hps.use_exp_rouge:
+        test_vocab = Vocab(os.path.join(hps.cache_dir, 'test_vocab'), max_size=-1)
+
     iter_start_time = time.time()
     with torch.no_grad():
         logger.info("[Model] Sequence Labeling!")
@@ -87,27 +99,29 @@ def run_test(model, dataset, loader, model_name, hps):
             if hps.cuda:
                 G.to(torch.device("cuda"))
 
-            pred_idxs, hypss, refers = tester.evaluation(G, index, dataset, blocking=hps.blocking)
+            pred_idxs, hypss, refers, labels = tester.evaluation(G, index, dataset, blocking=hps.blocking)
 
             if hps.save_label:
-                for i, pred_idx, hyps, refer in zip(index, pred_idxs, hypss, refers):
+                for i, pred_idx, hyps, refer, label in zip(index, pred_idxs, hypss, refers, labels):
                     resfile.write(json.dumps(
-                        {'index': i, 'pred_idx': pred_idx, 'hyps': hyps, 'refer': refer},
+                        {'index': i, 'pred_idx': pred_idx, 'label': label, 'hyps': hyps, 'refer': refer},
                         ensure_ascii=False) + '\n')
 
-    running_avg_loss = tester.running_avg_loss
+            if i % 20 == 0:
+                exp_uploader.async_heart_beat(exp)
 
-    # if hps.save_label:
-    #     save label and do not calculate rouge
-    #     json.dump(tester.extractLabel, resfile)
-    #     tester.SaveDecodeFile()
-    #     logger.info('   | end of test | time: {:5.2f}s | '.format((time.time() - iter_start_time)))
-    #     return
+    running_avg_loss = tester.running_avg_loss
 
     logger.info("The number of pairs is %d", tester.rougePairNum)
     if not tester.rougePairNum:
         logger.error("During testing, no hyps is selected!")
         sys.exit(1)
+
+    if hps.use_exp_rouge:
+        exp_server_hyps, exp_server_refer = result_word2id(
+            test_vocab, [chap.split('\n') for chap in tester.hyps], [chap.split('\n') for chap in tester.refer])
+        rouge_server.eval_rouge(hps.proj_name, hps.exp_name, 'decode_test_ckpt-{}'.format(hps.test_model.split('_')[-1]),
+                                exp_server_hyps, exp_server_refer)
 
     if hps.use_pyrouge:
         if isinstance(tester.refer[0], list):
@@ -178,6 +192,12 @@ def main():
     parser.add_argument('--blocking', action='store_true', default=False, help='ngram blocking')
 
     parser.add_argument('-m', type=int, default=3, help='decode summary length')
+
+    # exp_upload
+    parser.add_argument('--proj_name', type=str, default='wyq_structural_summ', help='Project Name')
+    parser.add_argument('--exp_name', type=str, default='myHeterSumGrpah', help='Experiment Name')
+    parser.add_argument('--use_exp_rouge', type=bool, default=True, help='whether send decoded summ to the exp_server to get rouge')
+
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu

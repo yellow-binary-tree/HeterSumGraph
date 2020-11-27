@@ -127,7 +127,8 @@ class ExampleSet():
 
 
 class Example():
-    def __init__(self, summary, ori_text):
+    def __init__(self, summary, ori_text, labels=None):
+        self.labels = labels
         self.original_abstract = "\n".join(summary)
         if isinstance(ori_text, list) and isinstance(ori_text[0], list):
             self.original_article_sents = ori_text[len(ori_text)//2]        # only the center chapter can be extracted
@@ -146,7 +147,10 @@ class MapDataset(torch.utils.data.Dataset):
 
     def get_example(self, index):
         e = self.example_list[index]
-        return Example(e['summary'], e['ori_text'])
+        if 'label' in e.keys():
+            return Example(e['summary'], e['ori_text'], e['label'])
+        else:
+            return Example(e['summary'], e['ori_text'])
 
     def __getitem__(self, index):
         """
