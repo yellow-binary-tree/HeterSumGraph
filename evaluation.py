@@ -77,7 +77,7 @@ def run_test(model, dataset, loader, model_name, hps):
 
     resfile = None
     if hps.save_label:
-        log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1])
+        log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1] + '_' + model_name)
         resfile = open(log_dir, "w", encoding='utf-8')
         logger.info("[INFO] Write the decode result into %s", log_dir)
 
