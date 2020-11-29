@@ -67,7 +67,7 @@ class SGATLayer(nn.Module):
         return {'sh': h}
 
     def forward(self, g, h):
-        snode_id = g.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+        snode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
         sedge_id = g.filter_edges(lambda edges: edges.data["dtype"] == 0)
         z = self.fc(h)
         g.nodes[snode_id].data['z'] = z
@@ -102,9 +102,9 @@ class WSGATLayer(nn.Module):
         return {'sh': h}
 
     def forward(self, g, h):
-        wnode_id = g.filter_nodes(lambda nodes: nodes.data["unit"] == 0)
-        snode_id = g.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
-        wsedge_id = g.filter_edges(lambda edges: (edges.src["unit"] == 0) & (edges.dst["unit"] == 1))
+        wnode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 0)
+        snode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+        wsedge_id = g.filter_edges(lambda edges: (edges.src["dtype"] == 0) & (edges.dst["dtype"] == 1))
         # print("id in WSGATLayer")
         # print(wnode_id, snode_id, wsedge_id)
         z = self.fc(h)
@@ -140,9 +140,9 @@ class SWGATLayer(nn.Module):
         return {'sh': h}
 
     def forward(self, g, h):
-        wnode_id = g.filter_nodes(lambda nodes: nodes.data["unit"] == 0)
-        snode_id = g.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
-        swedge_id = g.filter_edges(lambda edges: (edges.src["unit"] == 1) & (edges.dst["unit"] == 0))
+        wnode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 0)
+        snode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+        swedge_id = g.filter_edges(lambda edges: (edges.src["dtype"] == 1) & (edges.dst["dtype"] == 0))
         z = self.fc(h)
         g.nodes[snode_id].data['z'] = z
         g.apply_edges(self.edge_attention, edges=swedge_id)

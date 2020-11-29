@@ -106,16 +106,15 @@ class ExampleSet():
         try:
             graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
             graph = graphs[0]
-
             # filter erroneous graphs which may cause exception
-            meta = {}
-            meta['dtype_0'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 0)
-            meta['dtype_1'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-            meta['unit_0'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 0)
-            meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
-            if self.hps.model == 'HDSG':
-                meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
-                meta['dtype_2'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 2)
+            # meta = {}
+            # meta['dtype_0'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 0)
+            # meta['dtype_1'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            # meta['unit_0'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 0)
+            # meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+            # if self.hps.model == 'HDSG':
+            # meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
+            # meta['dtype_2'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 2)
         except Exception as e:
             logger.warning('[WARNING] dataloader %d failed reading graph folder %d, file %d.' % (self.worker_id, self.folder_i, self.graph_i))
             logger.warning(str(e))
@@ -162,12 +161,12 @@ class MapDataset(torch.utils.data.Dataset):
         try:
             graphs, labels = load_graphs(os.path.join(self.hps.cache_dir, 'graph', self.mode, str(index)+'.bin'))
             graph = graphs[0]
-            meta = {}
+            # meta = {}
             # filter erroneous graphs which may cause exception
-            meta['dtype_1'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-            meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
-            if self.hps.model == 'HDSG':
-                meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
+            # meta['dtype_1'] = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+            # meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
+            # if self.hps.model == 'HDSG':
+                # meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
             return graph, index
         except Exception as e:
             logger.warning('[WARNING] failed reading graph %d.' % (index))

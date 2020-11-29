@@ -26,7 +26,7 @@ fi
 echo 'testall.sh: test '$model $dataset $save_dir $winsize $gpu
 model_filenames=$(ls save/$save_dir/train)
 # decode_filenames=(iter_53465 iter_56610 iter_59755 iter_62900 iter_66045 iter_69190 iter_72335 iter_75480 iter_78625)
-decode_filenames=(iter_34595 iter_37740 iter_40885 iter_44030)
+decode_filenames=(iter_47175 iter_50320)
 
 for model_filename in ${decode_filenames[@]}
 do

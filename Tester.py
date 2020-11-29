@@ -111,8 +111,8 @@ class SLTester(TestPipLine):
         # logger.debug(outputs)
 
         snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-        if self.hps.model == 'HDSG':
-            snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
+        # if self.hps.model == 'HDSG':
+        snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
 
         label = G.ndata["label"][snode_id].sum(-1)            # [n_nodes]
         G.nodes[snode_id].data["loss"] = self.criterion(outputs, label).unsqueeze(-1)    # [n_nodes, 1]
@@ -134,8 +134,8 @@ class SLTester(TestPipLine):
 
             g = glist[j]
             snode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
-            if self.hps.model == 'HDSG':
-                snode_id = g.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
+            # if self.hps.model == 'HDSG':
+            snode_id = g.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
             N = len(snode_id)
             p_sent = g.ndata["p"][snode_id]
             p_sent = p_sent.view(-1, 2)   # [node, 2]

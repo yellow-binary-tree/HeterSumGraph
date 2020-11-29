@@ -144,8 +144,8 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             logger.debug('[DEBUG] iter %d, forward graph G: time %.5f' % (iters_elapsed, (time3-time2)))
 
             snode_id = G.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
-            if hps.model == 'HDSG':
-                snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
+            # if hps.model == 'HDSG':
+            snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
 
             label = G.ndata["label"][snode_id].sum(-1)  # [n_nodes]
             G.nodes[snode_id].data["loss"] = criterion(outputs, label).unsqueeze(-1)  # [n_nodes, 1]

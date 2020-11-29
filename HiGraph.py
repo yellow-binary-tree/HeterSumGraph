@@ -93,9 +93,10 @@ class HSumGraph(nn.Module):
         :return: result: [sentnum, 2]
         """
 
+        snode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
+
         # word node init
         word_feature = self.set_wnfeature(graph)    # [wnode, embed_size]
-
         sent_feature = self.n_feature_proj(self.set_snfeature(graph))    # [snode, n_feature_size]
 
         # the start state
@@ -108,7 +109,16 @@ class HSumGraph(nn.Module):
             # word -> sent
             sent_state = self.word2sent(graph, word_state, sent_state)
 
-        result = self.wh(sent_state)
+        graph.nodes[snode_id].data["hidden_state"] = sent_state
+        extractable_snode_id = graph.filter_nodes(predicate=lambda nodes: nodes.data["dtype"] == 1)
+        extractable_snode_id = graph.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=extractable_snode_id)
+
+        s_state_list = []
+        for snid in extractable_snode_id:
+            s_state_list.append(graph.nodes[snid].data["hidden_state"])
+
+        s_state = torch.cat(s_state_list, dim=0)
+        result = self.wh(s_state)
 
         return result
 
