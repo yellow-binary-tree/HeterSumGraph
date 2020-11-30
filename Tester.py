@@ -126,13 +126,11 @@ class SLTester(TestPipLine):
         glist = dgl.unbatch(G)
 
         for j in range(len(glist)):
-
             idx = index[j]
             example = dataset.get_example(idx)
             original_article_sents = example.original_article_sents
             sent_max_number = len(original_article_sents)
             refer = example.original_abstract
-            labels = example.labels
 
             g = glist[j]
             snode_id = g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)
@@ -169,8 +167,7 @@ class SLTester(TestPipLine):
 
             self._hyps.append(hyps)
             self._refer.append(refer)
-            self._label.append(labels)
-        return self.extracts[-len(glist):], self._hyps[-len(glist):], self._refer[-len(glist):], self._label[-len(glist):]
+        return self.extracts[-len(glist):], self._hyps[-len(glist):], self._refer[-len(glist):]
 
     def getMetric(self):
         logger.info("[INFO] Validset match_true %d, pred %d, true %d, total %d, match %d",

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash myrun.sh run HDSG winsize3_bow_cut 3 6 > HDSGfc3_1126.log 2>&1 &
+# nohup bash myrun.sh test HSG winsize1_random_cut 1 4 20201126_204639 trainbestmodel > HSGrc1_juqingba_test.log 2>&1 &
+# nohup bash myrun.sh test HDSG winsize3_bow_cut 1 3 20201126_204634 trainbestmodel > HDSGbc3_juqingba_test.log 2>&1 &
 
 mode=$1
 model=$2
@@ -56,7 +57,7 @@ elif [ $mode == 'run' ]; then
 elif [ $mode == 'test' ]; then
     echo 'run.sh: test '$model $dataset $winsize $gpu
     python -u evaluation.py \
-        --model $model --exp_name myHeterSumGraph_test_${model}_${dataset}\
+        --model $model --exp_name myHeterSumGraph_test_${model}_${dataset}_${time}\
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$test_save_path --log_root log/ --test_model $test_model \

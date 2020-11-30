@@ -77,11 +77,7 @@ def run_test(model, dataset, loader, model_name, hps):
 
     resfile = None
     if hps.save_label:
-<<<<<<< HEAD
         log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1] + '_' + model_name)
-=======
-        log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1] + '_' +  model_name)
->>>>>>> all_preprocess
         resfile = open(log_dir, "w", encoding='utf-8')
         logger.info("[INFO] Write the decode result into %s", log_dir)
 
@@ -106,9 +102,9 @@ def run_test(model, dataset, loader, model_name, hps):
             pred_idxs, hypss, refers = tester.evaluation(G, index, dataset, blocking=hps.blocking, compute_loss=False)
 
             if hps.save_label:
-                for i, pred_idx, hyps, refer, label in zip(index, pred_idxs, hypss, refers, labels):
+                for i, pred_idx, hyps, refer in zip(index, pred_idxs, hypss, refers):
                     resfile.write(json.dumps(
-                        {'index': i, 'pred_idx': pred_idx, 'label': label, 'hyps': hyps, 'refer': refer},
+                        {'index': i, 'pred_idx': pred_idx, 'hyps': hyps, 'refer': refer},
                         ensure_ascii=False) + '\n')
 
             if i % 20 == 0:
