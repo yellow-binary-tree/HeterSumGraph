@@ -33,7 +33,7 @@ def catDoc(textlist):
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='qidian_1118_winsize1', help='dataset name')
 parser.add_argument('--doc_max_timesteps', type=int, default=100, help='max sentences in input data')
-parser.add_argument('--sent_max_len', type=int, default=100, help='max tokens in a sentence')
+parser.add_argument('--sent_max_len', type=int, default=50, help='max tokens in a sentence')
 parser.add_argument('--model', type=str, default='HSG', help='model structure, [HSG|HDSGn]')
 parser.add_argument('--vocab_size', type=int, default=100000, help='Size of vocabulary. [default: 50000]')
 parser.add_argument('--num_proc', type=int, default=1, help='num of processes.')
@@ -74,13 +74,12 @@ for w in TFIDF_W:
 class Example(object):
     """Class representing a train/val/test example for single-document extractive summarization."""
 
-    def __init__(self, article_sents, abstract_sents, sent_max_len, label):
+    def __init__(self, article_sents, abstract_sents, sent_max_len):
         """ Initializes the Example, performing tokenization and truncation to produce the encoder, decoder and target sequences, which are stored in self.
 
         :param article_sents: list(strings) for single document or list(list(string)) for multi-document; one per article sentence. each token is separated by a single space.
         :param abstract_sents: list(strings); one per abstract sentence. In each sentence, each token is separated by a single space.
         :param sent_max_len: int, max length of each sentence
-        :param label: list, the No of selected sentence, e.g. [1,3,5]
         """
 
         self.sent_max_len = sent_max_len
@@ -103,14 +102,6 @@ class Example(object):
             self.enc_sent_input.append([VOCAB.word2id(w.lower()) for w in article_words])  # list of word ids; OOVs are represented by the id for UNK token
         self._pad_encoder_input(VOCAB.word2id('[PAD]'))
 
-        # Store the label
-        self.label = label
-        label_shape = (len(self.original_article_sents), len(label))  # [N, len(label)]
-        # label_shape = (len(self.original_article_sents), len(self.original_article_sents))
-        self.label_matrix = np.zeros(label_shape, dtype=int)
-        if label != []:
-            self.label_matrix[np.array(label), np.arange(len(label))] = 1  # label_matrix[i][j]=1 indicate the i-th sent will be selected in j-th step
-
     def _pad_encoder_input(self, pad_id):
         """
         :param pad_id: int; token pad id
@@ -128,17 +119,16 @@ class Example(object):
 class Example2(Example):
     """Class representing a train/val/test example for multi-document extractive summarization."""
 
-    def __init__(self, article_sents, abstract_sents, extractable_labels, sent_max_len, label):
+    def __init__(self, article_sents, abstract_sents, extractable_labels, sent_max_len):
         """ Initializes the Example, performing tokenization and truncation to produce the encoder, decoder and target sequences, which are stored in self.
 
         :param article_sents: list(list(string)) for multi-document; one per article sentence. each token is separated by a single space.
         :param abstract_sents: list(strings); one per abstract sentence. In each sentence, each token is separated by a single space.
         :param extractable_labels: list(int); one int(0/1) per article sentence. 1 if the sentence can be extracted and 0 if the sentence can not.
         :param sent_max_len: int, max length of each sentence
-        :param label: list, the No of selected sentence, e.g. [1,3,5]
         """
 
-        super().__init__(article_sents, abstract_sents, sent_max_len, label)
+        super().__init__(article_sents, abstract_sents, sent_max_len)
         cur = 0
         self.original_articles = []
         self.article_len = []
@@ -179,24 +169,22 @@ class GraphPreprocesser(object):
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
-            label = self.pad_label_m(item.label_matrix)
-            G = self.CreateGraph(input_pad, label, w2s_w)
+            G = self.CreateGraph(input_pad, w2s_w)
             yield G, bookid, chapno, i
 
     def get_example(self):
         e = json.loads(self.data_fd.readline())
         e["summary"] = e.setdefault("summary", [])
-        example = Example(e["text"], e["summary"], self.sent_max_len, e["label"])
+        example = Example(e["text"], e["summary"], self.sent_max_len)
         return example, e["bookid"], e["chapno"]
 
     def get_w2s(self):
         return json.loads(self.w2s_fd.readline())
 
-    def CreateGraph(self, input_pad, label, w2s_w):
+    def CreateGraph(self, input_pad, w2s_w):
         """ Create a graph for each document
         
         :param input_pad: list(list); [sentnum, wordnum]
-        :param label: list(list); [sentnum, sentnum]
         :param w2s_w: dict(dict) {str: {str: float}}; for each sentence and each word, the tfidf between them
         :return: G: dgl.DGLGraph
             node:
@@ -237,16 +225,7 @@ class GraphPreprocesser(object):
             G.add_edges(sentid2nid, sent_nid, data={"dtype": torch.ones(N)})
         G.nodes[sentid2nid].data["words"] = torch.LongTensor(input_pad)  # [N, seq_len]
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
-        G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
         return G
-
-    def pad_label_m(self, label_matrix):
-        label_m = label_matrix[:self.doc_max_timesteps, :self.doc_max_timesteps]
-        N, m = label_m.shape
-        if m < self.doc_max_timesteps:
-            pad_m = np.zeros((N, self.doc_max_timesteps - m))
-            return np.hstack([label_m, pad_m])
-        return label_m
 
     def AddWordNode(self, G, inputid):
         wid2nid = {}
@@ -289,14 +268,13 @@ class MultiGraphPreprocesser(GraphPreprocesser):
             extractable_labels = item.extractable_labels[:self.doc_max_timesteps]
             enc_doc_input = item.enc_doc_input
             article_len = item.article_len
-            label = self.pad_label_m(item.label_matrix)
-            G = self.CreateGraph(article_len, sent_pad, enc_doc_input, label, extractable_labels, w2s_w, w2d_w)
+            G = self.CreateGraph(article_len, sent_pad, enc_doc_input, extractable_labels, w2s_w, w2d_w)
             yield G, bookid, chapno, i
 
     def get_example(self):
         e = json.loads(self.data_fd.readline())
         e["summary"] = e.setdefault("summary", [])
-        example = Example2(e["text"], e["summary"], e["extractable"], self.sent_max_len, e["label"])
+        example = Example2(e["text"], e["summary"], e["extractable"], self.sent_max_len)
         return example, e["bookid"], e["chapno"]
 
     def get_w2d(self):
@@ -316,13 +294,12 @@ class MultiGraphPreprocesser(GraphPreprocesser):
                     return sent2doc
         return sent2doc
 
-    def CreateGraph(self, docLen, sent_pad, doc_pad, label, extractable_labels, w2s_w, w2d_w):
+    def CreateGraph(self, docLen, sent_pad, doc_pad, extractable_labels, w2s_w, w2d_w):
         """ Create a graph for each document
 
         :param docLen: list; the length of each document in this example
         :param sent_pad: list(list), [sentnum, wordnum]
         :param doc_pad: list, [document, wordnum]
-        :param label: list(list), [sentnum, sentnum]
         :param extractable_labels: list(0/1), [sentnum] whether the sentence can be extracted
         :param w2s_w: dict(dict) {str: {str: float}}, for each sentence and each word, the tfidf between them
         :param w2d_w: dict(dict) {str: {str: float}}, for each document and each word, the tfidf between them
@@ -393,7 +370,6 @@ class MultiGraphPreprocesser(GraphPreprocesser):
 
         G.nodes[sentid2nid].data["words"] = torch.LongTensor(sent_pad)  # [N, seq_len]
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
-        G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
         G.nodes[sentid2nid].data["extractable"] = torch.LongTensor(extractable_labels).view(-1, 1) # [N, 1]
         return G
 
@@ -442,7 +418,7 @@ def main():
 
     # build graph
     threads = []
-    filenames = [f for f in os.listdir(data_folder) if 'test' not in f]
+    filenames = [f for f in os.listdir(data_folder) if 'test' in f]
     filenames.sort()
     for i, filename in enumerate(filenames):
         if i % args.num_proc != args.no_proc - 1:

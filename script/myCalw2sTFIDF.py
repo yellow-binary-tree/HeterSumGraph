@@ -23,10 +23,9 @@ def catDoc(textlist):
 
 def get_tfidf_embedding(text):
     """
-    
     :param text: list, sent_number * word
-    :return: 
-        vectorizer: 
+    :return:
+        vectorizer:
             vocabulary_: word2id
             get_feature_names(): id2word
         tfidf: array [sent_number, max_word_number]
