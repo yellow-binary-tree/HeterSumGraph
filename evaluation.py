@@ -71,7 +71,7 @@ def run_test(model, dataset, loader, model_name, hps):
 
     resfile = None
     if hps.save_label:
-        log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1])
+        log_dir = os.path.join(test_dir, hps.cache_dir.split("/")[-1] + '_' +  model_name)
         resfile = open(log_dir, "w", encoding='utf-8')
         logger.info("[INFO] Write the decode result into %s", log_dir)
 
@@ -87,7 +87,7 @@ def run_test(model, dataset, loader, model_name, hps):
             if hps.cuda:
                 G.to(torch.device("cuda"))
 
-            pred_idxs, hypss, refers = tester.evaluation(G, index, dataset, blocking=hps.blocking)
+            pred_idxs, hypss, refers = tester.evaluation(G, index, dataset, blocking=hps.blocking, compute_loss=False)
 
             if hps.save_label:
                 for i, pred_idx, hyps, refer in zip(index, pred_idxs, hypss, refers):
@@ -124,7 +124,7 @@ def run_test(model, dataset, loader, model_name, hps):
         + "Rougel:\n\tp:%.6f, r:%.6f, f:%.6f\n" % (scores_all['rouge-l']['p'], scores_all['rouge-l']['r'], scores_all['rouge-l']['f'])
     logger.info(res)
 
-    tester.getMetric()
+    # tester.getMetric()
     # tester.SaveDecodeFile()
     logger.info('[INFO] End of test | time: {:5.2f}s | test loss {:5.4f} | '.format((time.time() - iter_start_time), float(running_avg_loss)))
 
@@ -223,7 +223,7 @@ def main():
 
     # HINT: now we are trying to decode val data
     # change dataset mode to "test" if you want to decode test data.
-    dataset = MapDataset(hps, mode='val')
+    dataset = MapDataset(hps, mode='test')
     loader = torch.utils.data.DataLoader(dataset, batch_size=hps.batch_size, shuffle=False, collate_fn=graph_collate_fn, num_workers=args.num_workers, pin_memory=True)
 
     if args.cuda:
