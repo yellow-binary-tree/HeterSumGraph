@@ -43,8 +43,19 @@ def compress_array(a, id2word):
     return d
 
 def process_file(srcFile, saveFile):
-    fout = open(saveFile, "w")
+    processed_lines = 0
+    if os.path.exists(saveFile):
+        fout = open(saveFile, "r")
+        for line in fout:
+            processed_lines += 1
+        fout = open(saveFile, "a")
+    else:
+        fout = open(saveFile, "w")
+
     with open(srcFile, encoding='utf-8') as f:
+        for i in range(processed_lines):
+            f.readline()
+
         for line in f:
             e = json.loads(line)
             if isinstance(e["text"], list) and isinstance(e["text"][0], list):
