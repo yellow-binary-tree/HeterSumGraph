@@ -62,7 +62,7 @@ elif [ $mode == 'test' ]; then
         --save_root save/$test_save_path --log_root log/ --test_model $test_model \
         --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size \
-        --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps -m 5 \
+        --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps -m 2 \
         --save_label --cuda --gpu $gpu
 else
     echo 'please select a run mode: debug / run'

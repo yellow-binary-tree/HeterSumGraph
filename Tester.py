@@ -97,12 +97,13 @@ class SLTester(TestPipLine):
         self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
         self.blocking_win = blocking_win
 
-    def evaluation(self, G, index, dataset, blocking=False, exp=None):
+    def evaluation(self, G, index, dataset, blocking=False, compute_loss=True):
         """
             :param G: the model
             :param index: list, example id
             :param dataset: dataset which includes text and summary
             :param blocking: bool, for n-gram blocking
+            :param compute_loss: whether the label is known and loss computing is required
         return:
             list(extracted id), hyps, refer
         """
@@ -114,11 +115,12 @@ class SLTester(TestPipLine):
         if self.hps.model == 'HDSG':
             snode_id = G.filter_nodes(predicate=lambda nodes: (nodes.data["extractable"] == 1).squeeze(1), nodes=snode_id)
 
-        label = G.ndata["label"][snode_id].sum(-1)            # [n_nodes]
-        G.nodes[snode_id].data["loss"] = self.criterion(outputs, label).unsqueeze(-1)    # [n_nodes, 1]
-        loss = dgl.sum_nodes(G, "loss")    # [batch_size, 1]
-        loss = loss.mean()
-        self.running_loss += float(loss.data)
+        if compute_loss:
+            label = G.ndata["label"][snode_id].sum(-1)            # [n_nodes]
+            G.nodes[snode_id].data["loss"] = self.criterion(outputs, label).unsqueeze(-1)    # [n_nodes, 1]
+            loss = dgl.sum_nodes(G, "loss")    # [batch_size, 1]
+            loss = loss.mean()
+            self.running_loss += float(loss.data)
 
         G.nodes[snode_id].data["p"] = outputs
         glist = dgl.unbatch(G)
@@ -139,7 +141,6 @@ class SLTester(TestPipLine):
             N = len(snode_id)
             p_sent = g.ndata["p"][snode_id]
             p_sent = p_sent.view(-1, 2)   # [node, 2]
-            label = g.ndata["label"][snode_id].sum(-1).squeeze().cpu()    # [n_node]
             if self.m == 0:
                 prediction = p_sent.max(1)[1]    # [node]
                 pred_idx = torch.arange(N)[prediction != 0].long()
@@ -155,10 +156,13 @@ class SLTester(TestPipLine):
             self.extracts.append(pred_idx.tolist())
 
             self.pred += prediction.sum()
-            self.true += label.sum()
 
-            self.match_true += ((prediction == label) & (prediction == 1)).sum()
-            self.match += (prediction == label).sum()
+            if compute_loss:
+                label = g.ndata["label"][snode_id].sum(-1).squeeze().cpu()    # [n_node]
+                self.true += label.sum()
+                self.match_true += ((prediction == label) & (prediction == 1)).sum()
+                self.match += (prediction == label).sum()
+
             self.total_sentence_num += N
             self.example_num += 1
             hyps = "\n".join(original_article_sents[id] for id in pred_idx if id < sent_max_number)
