@@ -8,19 +8,20 @@ mode=$1
 model=$2
 dataset=$3
 winsize=$4
-gpu=$5
+winsize_chap_sents=$5
+gpu=$6
 
-test_save_path=$6
-test_model=$7
+test_save_path=$7
+test_model=$8
 
 if [ $winsize == 1 ]; then
     doc_max_timesteps=30
 elif [ $winsize == 3 ]; then
-    doc_max_timesteps=50
+        doc_max_timesteps=$(( 30+2*$winsize_chap_sents ))
 elif [ $winsize == 5 ]; then
-    doc_max_timesteps=70
+        doc_max_timesteps=$(( 30+4*$winsize_chap_sents ))
 elif [ $winsize == 7 ]; then
-    doc_max_timesteps=90
+        doc_max_timesteps=$(( 30+6*$winsize_chap_sents ))
 fi
 
 batch_size=16
@@ -45,8 +46,8 @@ elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $winsize $gpu
     python -u train.py \
         --model $model --exp_name myHeterSumGraph_${model}_${dataset}_${time} \
-        --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
-        --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
+        --data_dir data/$dataset \
+        --cache_dir cache/$dataset \
         --save_root save/$time --log_root log \
         --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size \
@@ -54,6 +55,8 @@ elif [ $mode == 'run' ]; then
         --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \
         --train_num_workers 0 --eval_num_workers 0 \
         --cuda --gpu $gpu
+        # --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
+        # --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
 elif [ $mode == 'test' ]; then
     echo 'run.sh: test '$model $dataset $winsize $gpu
     python -u evaluation.py \
