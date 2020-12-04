@@ -260,7 +260,7 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
         for i, (G, index) in enumerate(loader):
             if hps.cuda:
                 G.to(torch.device("cuda"))
-            tester.evaluation(G, index, valset, exp=exp)
+            tester.evaluation(G, index, valset)
 
             if i % 20 == 0:
                 exp_uploader.async_heart_beat(exp)
