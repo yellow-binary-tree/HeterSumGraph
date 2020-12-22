@@ -27,10 +27,15 @@ fi
 
 batch_size=16
 
+embedding_path="/share/wangyq/resources/Tencent_AILab_ChineseEmbedding_200w.txt"
+word_emb_dim=200
+vocab_size=100000
 eval_iter=$(( 151472/3/$batch_size ))  # eval 3 times per epoch
 mmm=5
 if [[ $dataset == *"wiki_"* ]]; then
-    eval_iter=$(( 42000/3/$batch_size ))  # eval 3 times per epoch
+    vocab_size=50000
+    embedding_path="/share/wangyq/resources/glove.6B.200d.txt"
+    eval_iter=$(( 38896/2/$batch_size ))  # eval 2 times per epoch
     mmm=1
 fi
 
@@ -44,8 +49,8 @@ if [ $mode == 'debug' ]; then
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \
         --n_feature_size 8 --hidden_size 8 --ffn_inner_hidden_size 8 --lstm_hidden_state 8 \
-        --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
-        --vocab_size 100000 --batch_size 4 \
+        --embedding_path $embedding_path --word_emb_dim $word_emb_dim \
+        --vocab_size $vocab_size --batch_size 4 \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
         --lr_descent --grad_clip -m $mmm --eval_after_iterations 100 \
         --cuda --gpu $gpu
@@ -56,8 +61,8 @@ elif [ $mode == 'run' ]; then
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \
-        --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
-        --vocab_size 100000 --batch_size $batch_size \
+        --embedding_path $embedding_path --word_emb_dim $word_emb_dim \
+        --vocab_size $vocab_size --batch_size $batch_size \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
         --lr_descent --grad_clip -m $mmm --eval_after_iterations $eval_iter \
         --cuda --gpu $gpu
@@ -68,8 +73,8 @@ elif [ $mode == 'test' ]; then
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$test_save_path --log_root log/ --test_model $test_model \
-        --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
-        --vocab_size 100000 --batch_size $batch_size \
+        --embedding_path $embedding_path --word_emb_dim $word_emb_dim \
+        --vocab_size $vocab_size --batch_size $batch_size \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps -m $mmm \
         --save_label --cuda --gpu $gpu
 else
