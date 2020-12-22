@@ -40,10 +40,15 @@ if __name__ == '__main__':
         with open(filename, encoding='utf8') as f:
             for line in f:
                 e = json.loads(line)
-                if isinstance(e["ori_text"], list) and isinstance(e["ori_text"][0], list):
-                    sents = catDoc(e["ori_text"])
+                if "ori_text" in e.keys():
+                    text_key = 'ori_text'
+                else: 
+                    text_key = 'text'
+
+                if isinstance(e[text_key], list) and isinstance(e[text_key][0], list):
+                    sents = catDoc(e[text_key])
                 else:
-                    sents = e["ori_text"]
+                    sents = e[text_key]
                 text = " ".join(sents)
                 summary = " ".join(e["summary"])
                 allword.extend(text.split())

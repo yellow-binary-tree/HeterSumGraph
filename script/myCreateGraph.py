@@ -175,7 +175,7 @@ class GraphPreprocesser(object):
                     yield None, None, None, i
                     continue
                 except Exception as e:
-                    print('folder %s, graph %d, error when loading.' % (self.dest_folder ,i))
+                    print('folder %s, graph %d, error when loading.' % (self.dest_folder, i))
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             input_pad = item.enc_sent_input_pad[:self.doc_max_timesteps]
@@ -281,7 +281,7 @@ class MultiGraphPreprocesser(GraphPreprocesser):
                     yield None, None, None, i
                     continue
                 except Exception as e:
-                    print('folder %s, graph %d, error when loading.' % (self.dest_folder ,i))
+                    print('folder %s, graph %d, error when loading.' % (self.dest_folder, i))
             item, bookid, chapno = self.get_example()
             w2s_w = self.get_w2s()
             w2d_w = self.get_w2d()
@@ -394,7 +394,7 @@ class MultiGraphPreprocesser(GraphPreprocesser):
         G.nodes[sentid2nid].data["words"] = torch.LongTensor(sent_pad)  # [N, seq_len]
         G.nodes[sentid2nid].data["position"] = torch.arange(1, N + 1).view(-1, 1).long()  # [N, 1]
         G.nodes[sentid2nid].data["label"] = torch.LongTensor(label)  # [N, doc_max]
-        G.nodes[sentid2nid].data["extractable"] = torch.LongTensor(extractable_labels).view(-1, 1) # [N, 1]
+        G.nodes[sentid2nid].data["extractable"] = torch.LongTensor(extractable_labels).view(-1, 1)  # [N, 1]
         return G
 
 
@@ -416,7 +416,8 @@ class ProcessThread(threading.Thread):
             assert i == index, "data id != graph id"
             if graph is None:
                 continue
-            graph_label ={"content": torch.tensor([int(bookid), int(chapno)])}
+            # graph_label ={"content": torch.tensor([int(bookid), int(chapno)])}
+            graph_label ={"content": torch.tensor([int(chapno)])}
             save_graphs(os.path.join(self.dest_folder, str(i)+'.bin'), [graph], graph_label)
         print('[graph] finish thread: %d' % self._id)
 
@@ -432,7 +433,8 @@ class MultiProcessThread(ProcessThread):
             assert i == index, "data id != graph id"
             if graph is None:
                 continue
-            graph_label ={"content": torch.tensor([int(bookid), int(chapno)])}
+            # graph_label = {"content": torch.tensor([int(bookid), int(chapno)])}
+            graph_label = {"content": torch.tensor([int(chapno)])}
             save_graphs(os.path.join(self.dest_folder, str(i)+'.bin'), [graph], graph_label)
         print('[graph] finish thread: %d' % self._id)
 
@@ -442,7 +444,7 @@ def main():
 
     # build graph
     threads = []
-    filenames = [f for f in os.listdir(data_folder) if 'test' not in f]
+    filenames = [f for f in os.listdir(data_folder)]
     filenames.sort()
     for i, filename in enumerate(filenames):
         if i % args.num_proc != args.no_proc - 1:

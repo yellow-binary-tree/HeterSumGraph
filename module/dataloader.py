@@ -147,10 +147,14 @@ class MapDataset(torch.utils.data.Dataset):
 
     def get_example(self, index):
         e = self.example_list[index]
-        if 'label' in e.keys():
-            return Example(e['summary'], e['ori_text'], e['label'])
+        if 'ori_text' in e.keys():
+            text_key = 'ori_text'
         else:
-            return Example(e['summary'], e['ori_text'])
+            text_key = 'text'
+        if 'label' in e.keys():
+            return Example(e['summary'], e[text_key], e['label'])
+        else:
+            return Example(e['summary'], e[text_key])
 
     def __getitem__(self, index):
         """

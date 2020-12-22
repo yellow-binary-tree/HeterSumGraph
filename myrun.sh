@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash myrun.sh test HSG winsize1_random_cut 1 4 20201126_204639 trainbestmodel > HSGrc1_juqingba_test.log 2>&1 &
-# nohup bash myrun.sh test HDSG winsize3_bow_cut 1 3 20201126_204634 trainbestmodel > HDSGbc3_juqingba_test.log 2>&1 &
+# nohup bash myrun.sh run HSG wiki_winsize1 1 10 1 > wiki1_1222.log 2>&1 &
+
+export LD_LIBRARY_PATH=/opt/cuda-10.0/lib64:$LD_LIBRARY_PATH;
 
 mode=$1
 model=$2
@@ -25,7 +26,13 @@ elif [ $winsize == 7 ]; then
 fi
 
 batch_size=16
+
 eval_iter=$(( 151472/3/$batch_size ))  # eval 3 times per epoch
+mmm=5
+if [[ $dataset == *"wiki_"* ]]; then
+    eval_iter=$(( 42000/3/$batch_size ))  # eval 3 times per epoch
+    mmm=1
+fi
 
 time=$(date "+%Y%m%d_%H%M%S")
 
@@ -40,23 +47,20 @@ if [ $mode == 'debug' ]; then
         --embedding_path Tencent_AILab_ChineseEmbedding_debug.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size 4 \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
-        --lr_descent --grad_clip -m 5 --eval_after_iterations 100 \
+        --lr_descent --grad_clip -m $mmm --eval_after_iterations 100 \
         --cuda --gpu $gpu
 elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $winsize $gpu
     python -u train.py \
         --model $model --exp_name myHeterSumGraph_${model}_${dataset}_${time} \
-        --data_dir data/$dataset \
-        --cache_dir cache/$dataset \
+        --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
+        --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \
         --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
-        --lr_descent --grad_clip -m 5 --eval_after_iterations $eval_iter \
-        --train_num_workers 0 --eval_num_workers 0 \
+        --lr_descent --grad_clip -m $mmm --eval_after_iterations $eval_iter \
         --cuda --gpu $gpu
-        # --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
-        # --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
 elif [ $mode == 'test' ]; then
     echo 'run.sh: test '$model $dataset $winsize $gpu
     python -u evaluation.py \
@@ -66,7 +70,7 @@ elif [ $mode == 'test' ]; then
         --save_root save/$test_save_path --log_root log/ --test_model $test_model \
         --embedding_path Tencent_AILab_ChineseEmbedding_200w.txt --word_emb_dim 200 \
         --vocab_size 100000 --batch_size $batch_size \
-        --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps -m 2 \
+        --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps -m $mmm \
         --save_label --cuda --gpu $gpu
 else
     echo 'please select a run mode: debug / run'

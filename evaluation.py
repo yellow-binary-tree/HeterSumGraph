@@ -155,7 +155,7 @@ def main():
     parser.add_argument('--model', type=str, default="HSumGraph", help="model structure[HSG|HDSG]")
     parser.add_argument('--test_model', type=str, default='evalbestmodel', help='choose different model to test [multi/evalbestmodel/trainbestmodel/earlystop]')
     parser.add_argument('--use_pyrouge', action='store_true', default=False, help='use_pyrouge')
-    parser.add_argument('--num_workers', default=0, help='num_workers of the dataset')
+    parser.add_argument('--num_workers', default=8, help='num_workers of the dataset')
 
     # Where to save output
     parser.add_argument('--save_root', type=str, default='save/', help='Root directory for all model.')

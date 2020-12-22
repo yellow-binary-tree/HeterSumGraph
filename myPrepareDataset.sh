@@ -33,9 +33,7 @@ elif [ $task == 'HDSG7' ]; then
     doc_max_timesteps=$(( 30+6*$winsize_chap_sents ))
 fi
 
-echo "dataset: $dataset, task: $task, doc_max_timesteps: $doc_max_timesteps"
-
-num_proc=8
+num_proc=9
 
 {
     echo -e "\033[34m[Shell] Get low tfidf words from training set! \033[0m"
@@ -71,12 +69,12 @@ do {
         --num_proc $num_proc --no_proc $i
 } & done
 
-# build test graph
-{
-    python -u script/myCreateTestGraph.py \
-        --dataset $dataset --doc_max_timesteps $doc_max_timesteps --sent_max_len 50 --model $task \
-        --num_proc 1 --no_proc 1
-} 
+# # build test graph
+# {
+#     python -u script/myCreateTestGraph.py \
+#         --dataset $dataset --doc_max_timesteps $doc_max_timesteps --sent_max_len 50 --model $task \
+#         --num_proc 1 --no_proc 1
+# } 
 
 wait
 echo -e "\033[34m[Shell] Preprocess Finished! \033[0m"
