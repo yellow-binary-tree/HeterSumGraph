@@ -193,10 +193,11 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             if iters_elapsed % hps.eval_after_iterations == 0:
                 save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
                 best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed, exp)
-                if non_descent_cnt >= 3:
-                    logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
-                    save_model(model, os.path.join(train_dir, "earlystop"))
-                    return
+                # if non_descent_cnt >= 3:
+                #     logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
+                #     save_model(model, os.path.join(train_dir, "earlystop"))
+                #     return
+
             time6 = time.time()
             logger.debug('[DEBUG] iter %d, total time %.5f' % (iters_elapsed, (time6-iter_start_time)))
 
@@ -214,10 +215,10 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             # evaluate per epoch
             save_model(model, os.path.join(train_dir, 'iter_'+str(iters_elapsed)))
             best_loss, best_F, non_descent_cnt, saveNo = run_eval(model, valid_loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed)
-            if non_descent_cnt >= 3:
-                logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
-                save_model(model, os.path.join(train_dir, "earlystop"))
-                return
+            # if non_descent_cnt >= 3:
+            #     logger.error("[Error] val loss does not descent for three times. Stopping supervisor...")
+            #     save_model(model, os.path.join(train_dir, "earlystop"))
+            #     return
 
         if not best_train_loss or epoch_avg_loss < best_train_loss:
             save_file = os.path.join(train_dir, "bestmodel")
@@ -225,10 +226,10 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
                         save_file)
             save_model(model, save_file)
             best_train_loss = epoch_avg_loss
-        elif epoch_avg_loss >= best_train_loss:
-            logger.error("[Error] training loss does not descent. Stopping supervisor...")
-            save_model(model, os.path.join(train_dir, "earlystop"))
-            sys.exit(1)
+        # elif epoch_avg_loss >= best_train_loss:
+        #     logger.error("[Error] training loss does not descent. Stopping supervisor...")
+        #     save_model(model, os.path.join(train_dir, "earlystop"))
+        #     sys.exit(1)
 
 
 def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, saveNo, iters_elapsed, exp):
@@ -342,6 +343,7 @@ def main():
     parser.add_argument('--data_dir', type=str, default='data/CNNDM', help='The dataset directory.')
     parser.add_argument('--cache_dir', type=str, default='cache/CNNDM', help='The processed dataset directory')
     parser.add_argument('--embedding_path', type=str, default='/remote-home/dqwang/Glove/glove.42B.300d.txt', help='Path expression to external word embedding.')
+    parser.add_argument('--use_bert_emebdding', type=bool, default=False, help='use bert for init instead of lstm & cnn')
 
     # Important settings
     parser.add_argument('--model', type=str, default='HSG', help='model structure[HSG|HDSG]')
@@ -353,8 +355,8 @@ def main():
     parser.add_argument('--log_root', type=str, default='log/', help='Root directory for all logging.')
 
     # Hyperparameters
-    parser.add_argument('--train_num_workers', type=int, default=16, help='num of workers of DataLoader. [default: 4]')
-    parser.add_argument('--eval_num_workers', type=int, default=16, help='num of workers of DataLoader. [default: 4]')
+    parser.add_argument('--train_num_workers', type=int, default=8, help='num of workers of DataLoader. [default: 4]')
+    parser.add_argument('--eval_num_workers', type=int, default=8, help='num of workers of DataLoader. [default: 4]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU ID to use. [default: 0]')
     parser.add_argument('--cuda', action='store_true', default=False, help='GPU or CPU [default: False]')
     parser.add_argument('--vocab_size', type=int, default=50000, help='Size of vocabulary. [default: 50000]')

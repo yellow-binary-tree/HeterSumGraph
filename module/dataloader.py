@@ -22,6 +22,7 @@
 import os
 import time
 import json
+import numpy as np
 import torch
 import torch.utils.data
 
@@ -121,6 +122,10 @@ class ExampleSet():
             logger.warning(str(e))
             return self.__next__()
 
+        if self.hps.use_bert_embedding:
+            pass
+            # load sent and chap features
+            # sent_features = np.load(os.path.join(self.folder, ))
         time2 = time.time()
         logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
         return graph, self.data_no

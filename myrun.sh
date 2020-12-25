@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash myrun.sh run HSG wiki_winsize1 1 10 1 > wiki1_1222.log 2>&1 &
+# nohup bash myrun.sh run HSG wiki_winsize1 1 10 7 > wiki1_1225.log 2>&1 &
 
 export LD_LIBRARY_PATH=/opt/cuda-10.0/lib64:$LD_LIBRARY_PATH;
 
@@ -33,7 +33,6 @@ vocab_size=100000
 eval_iter=$(( 151472/3/$batch_size ))  # eval 3 times per epoch
 mmm=5
 if [[ $dataset == *"wiki_"* ]]; then
-    vocab_size=50000
     embedding_path="/share/wangyq/resources/glove.6B.200d.txt"
     eval_iter=$(( 38896/2/$batch_size ))  # eval 2 times per epoch
     mmm=1
