@@ -343,7 +343,7 @@ def main():
     parser.add_argument('--data_dir', type=str, default='data/CNNDM', help='The dataset directory.')
     parser.add_argument('--cache_dir', type=str, default='cache/CNNDM', help='The processed dataset directory')
     parser.add_argument('--embedding_path', type=str, default='/remote-home/dqwang/Glove/glove.42B.300d.txt', help='Path expression to external word embedding.')
-    parser.add_argument('--use_bert_emebdding', type=bool, default=False, help='use bert for init instead of lstm & cnn')
+    parser.add_argument('--use_bert_embedding', type=bool, default=False, help='use bert for init instead of lstm & cnn')
 
     # Important settings
     parser.add_argument('--model', type=str, default='HSG', help='model structure[HSG|HDSG]')
