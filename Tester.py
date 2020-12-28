@@ -97,7 +97,7 @@ class SLTester(TestPipLine):
         self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
         self.blocking_win = blocking_win
 
-    def evaluation(self, G, index, dataset, blocking=False, compute_loss=True):
+    def evaluation(self, G, sent_features, chap_features, index, dataset, blocking=False, compute_loss=True):
         """
             :param G: the model
             :param index: list, example id
@@ -108,7 +108,7 @@ class SLTester(TestPipLine):
             list(extracted id), hyps, refer
         """
         self.batch_number += 1
-        outputs = self.model.forward(G)
+        outputs = self.model.forward(G, sent_features, chap_features)
         # logger.debug(outputs)
 
         snode_id = G.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)

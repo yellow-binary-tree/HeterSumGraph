@@ -99,10 +99,11 @@ class ExampleSet():
                 self.folder_i += 1
                 self.graph_i = 0
                 if self.folder_i >= self.graph_data_folder_num:
-                    raise StopIteration
+                    self.folder_i, self.graph_i, self.data_no, self.folder_records = -1, -1, -1, 0
+                    break
                 self.folder = os.path.join(self.graph_dir, 'train'+str(self.folder_i))
                 self.folder_records = len(os.listdir(self.folder))
-            if self.data_no % self.num_workers == self.worker_id:
+            if (self.data_no % self.num_workers == self.worker_id) and self.data_no >= 0:
                 break
         try:
             graphs, labels = load_graphs(os.path.join(self.folder, str(self.graph_i)+'.bin'))
@@ -123,12 +124,17 @@ class ExampleSet():
             return self.__next__()
 
         if self.hps.use_bert_embedding:
-            pass
             # load sent and chap features
-            # sent_features = np.load(os.path.join(self.folder, ))
+            sent_features = np.load(os.path.join(self.hps.cache_dir, 'features', 'train' + str(self.folder_i), str(self.graph_i), 'sent_features.npy'))
+            sent_features = torch.FloatTensor(sent_features)
+            chap_features = np.load(os.path.join(self.hps.cache_dir, 'features', 'train' + str(self.folder_i), str(self.graph_i), 'chap_features.npy'))
+            chap_features = torch.FloatTensor(chap_features)
+        else:
+            sent_features, chap_features = None, None
+
         time2 = time.time()
         logger.debug('[DEBUG] dataloader %d start reading graph folder %d, file %d. using time %.5f' % (self.worker_id, self.folder_i, self.graph_i, time2-time1))
-        return graph, self.data_no
+        return graph, sent_features, chap_features, self.data_no
 
 
 class Example():
@@ -177,7 +183,17 @@ class MapDataset(torch.utils.data.Dataset):
             meta['unit_1'] = graph.filter_nodes(lambda nodes: nodes.data["unit"] == 1)
             if self.hps.model == 'HDSG':
                 meta['extractable_1'] = graph.filter_nodes(lambda nodes: nodes.data["extractable"] == 1)
-            return graph, index
+            
+            if self.hps.use_bert_embedding:
+                # load sent and chap features
+                sent_features = np.load(os.path.join(self.hps.cache_dir, 'features', self.mode, str(index), 'sent_features.npy'))
+                sent_features = torch.FloatTensor(sent_features)
+                chap_features = np.load(os.path.join(self.hps.cache_dir, 'features', self.mode, str(index), 'chap_features.npy'))
+                chap_features = torch.FloatTensor(chap_features)
+            else:
+                sent_features, chap_features = None, None
+
+            return graph, sent_features, chap_features, index
         except Exception as e:
             logger.warning('[WARNING] failed reading graph %d.' % (index))
             logger.warning(str(e))
@@ -203,8 +219,15 @@ def graph_collate_fn(samples):
     :param batch: (G, input_pad)
     :return:
     '''
-    graphs, index = map(list, zip(*samples))
+    graphs, sent_embeddings, chap_embeddings, index = map(list, zip(*samples))
     graph_len = [len(g.filter_nodes(lambda nodes: nodes.data["dtype"] == 1)) for g in graphs]  # sent node of graph
     sorted_len, sorted_index = torch.sort(torch.LongTensor(graph_len), dim=0, descending=True)
     batched_graph = dgl.batch([graphs[idx] for idx in sorted_index])
-    return batched_graph, [index[idx] for idx in sorted_index]
+    batched_index = [index[idx] for idx in sorted_index]
+    if sent_embeddings[0] is not None:
+        batched_sent_embeddings = [sent_embeddings[idx] for idx in sorted_index]
+        batched_sent_embeddings = torch.cat(batched_sent_embeddings, dim=0)
+    if chap_embeddings[0] is not None:
+        batched_chap_embeddings = [chap_embeddings[idx] for idx in sorted_index]
+        batched_chap_embeddings = torch.cat(batched_chap_embeddings, dim=0)
+    return batched_graph, batched_sent_embeddings, batched_chap_embeddings, batched_index

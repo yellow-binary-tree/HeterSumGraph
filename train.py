@@ -127,7 +127,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
         epoch_loss = 0.0
         train_loss = 0.0
         epoch_start_time = time.time()
-        for i, (G_cpu, index) in enumerate(train_loader):
+        for i, (G_cpu, sent_features, chap_features, index) in enumerate(train_loader):
             iters_elapsed_in_epoch += 1
             iters_elapsed += 1
             iter_start_time = time.time()
@@ -136,10 +136,12 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             time1 = time.time()
             if hps.cuda:
                 G = G_cpu.to(torch.device("cuda"))
+                sent_features = sent_features.to(torch.device("cuda"))
+                chap_features = chap_features.to(torch.device("cuda"))
             time2 = time.time()
             logger.debug('[DEBUG] iter %d,  transfer data to cuda: time %.5f' % (iters_elapsed, (time2-time1)))
 
-            outputs = model.forward(G)  # [n_snodes, 2]
+            outputs = model.forward(G, sent_features, chap_features)  # [n_snodes, 2]
             time3 = time.time()
             logger.debug('[DEBUG] iter %d, forward graph G: time %.5f' % (iters_elapsed, (time3-time2)))
 
@@ -175,7 +177,7 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
 
             train_loss += float(loss.data)
             epoch_loss += float(loss.data)
-            
+
             if iters_elapsed % 20 == 0:
                 exp_uploader.async_heart_beat(exp, loss=float(loss.data), global_step=iters_elapsed)
 
@@ -258,10 +260,12 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
 
     with torch.no_grad():
         tester = SLTester(model, hps, exp)
-        for i, (G, index) in enumerate(loader):
+        for i, (G, sent_features, chap_features, index) in enumerate(loader):
             if hps.cuda:
                 G.to(torch.device("cuda"))
-            tester.evaluation(G, index, valset)
+                sent_features = sent_features.to(torch.device("cuda"))
+                chap_features = chap_features.to(torch.device("cuda"))
+            tester.evaluation(G, sent_features, chap_features, index, valset)
 
             if i % 20 == 0:
                 exp_uploader.async_heart_beat(exp)
@@ -398,6 +402,7 @@ def main():
     parser.add_argument('--use_exp_rouge', type=bool, default=True, help='whether send decoded summ to the exp_server to get rouge')
 
     args = parser.parse_args()
+    logger.info(args)
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     torch.set_printoptions(threshold=50000)
@@ -405,8 +410,8 @@ def main():
     # occupy gpu
     devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
     total, used = devices_info[int(args.gpu)].split(',')
-    occupy_mem = int(int(total)*0.4)
-    if int(total)*0.9 - int(used) > occupy_mem:
+    occupy_mem = int(int(total)*0.3)
+    if int(total)*0.95 - int(used) > occupy_mem:
         occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
         del occupy
         logger.info('[INFO] occupied %d MB' % occupy_mem)
@@ -435,7 +440,6 @@ def main():
         embed.weight.requires_grad = args.embed_train
 
     hps = args
-    logger.info(hps)
 
     if hps.model == "HSG":
         model = HSumGraph(hps, embed)
