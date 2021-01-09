@@ -136,8 +136,9 @@ def run_training(model, train_loader, valid_loader, valset, hps, train_dir):
             time1 = time.time()
             if hps.cuda:
                 G = G_cpu.to(torch.device("cuda"))
-                sent_features = sent_features.to(torch.device("cuda"))
-                chap_features = chap_features.to(torch.device("cuda"))
+                if hps.use_bert_embedding:
+                    sent_features = sent_features.to(torch.device("cuda"))
+                    chap_features = chap_features.to(torch.device("cuda"))
             time2 = time.time()
             logger.debug('[DEBUG] iter %d,  transfer data to cuda: time %.5f' % (iters_elapsed, (time2-time1)))
 
@@ -263,8 +264,9 @@ def run_eval(model, loader, valset, hps, best_loss, best_F, non_descent_cnt, sav
         for i, (G, sent_features, chap_features, index) in enumerate(loader):
             if hps.cuda:
                 G.to(torch.device("cuda"))
-                sent_features = sent_features.to(torch.device("cuda"))
-                chap_features = chap_features.to(torch.device("cuda"))
+                if hps.use_bert_embedding:
+                    sent_features = sent_features.to(torch.device("cuda"))
+                    chap_features = chap_features.to(torch.device("cuda"))
             tester.evaluation(G, sent_features, chap_features, index, valset)
 
             if i % 20 == 0:
@@ -410,7 +412,7 @@ def main():
     # occupy gpu
     devices_info = os.popen('nvidia-smi --query-gpu=memory.total,memory.used --format=csv,nounits,noheader').read().strip().split("\n")
     total, used = devices_info[int(args.gpu)].split(',')
-    occupy_mem = int(int(total)*0.3)
+    occupy_mem = int(int(total)*0.4)
     if int(total)*0.95 - int(used) > occupy_mem:
         occupy = torch.cuda.FloatTensor(256, 1024, occupy_mem)
         del occupy

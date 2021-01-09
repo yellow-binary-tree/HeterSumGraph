@@ -224,10 +224,16 @@ def graph_collate_fn(samples):
     sorted_len, sorted_index = torch.sort(torch.LongTensor(graph_len), dim=0, descending=True)
     batched_graph = dgl.batch([graphs[idx] for idx in sorted_index])
     batched_index = [index[idx] for idx in sorted_index]
+
     if sent_embeddings[0] is not None:
         batched_sent_embeddings = [sent_embeddings[idx] for idx in sorted_index]
         batched_sent_embeddings = torch.cat(batched_sent_embeddings, dim=0)
+    else:
+        batched_sent_embeddings = None
+
     if chap_embeddings[0] is not None:
         batched_chap_embeddings = [chap_embeddings[idx] for idx in sorted_index]
         batched_chap_embeddings = torch.cat(batched_chap_embeddings, dim=0)
+    else:
+        batched_chap_embeddings = None
     return batched_graph, batched_sent_embeddings, batched_chap_embeddings, batched_index
