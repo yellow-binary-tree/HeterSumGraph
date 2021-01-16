@@ -10,13 +10,13 @@ import numpy as np
 from transformers import BertTokenizerFast, BertModel, BertConfig
 
 
-def bert_base_encode_chapters(model_name='bert-base-uncased', dataset='wiki_winsize1'):
-    model_base_folder = '/share/wangyq/.cache/huggingface/transformers/' + model_name
+def bert_base_encode_chapters(model_base_folder, dataset='wiki_winsize1', embedding_filename='chap_features.npy'):
     graph_base_folder = '/share/wangyq/project/HeterSumGraph/cache/' + dataset + '/features'
     data_base_folder = '/share/wangyq/project/HeterSumGraph/data/' + dataset
 
-    print('bert_base_encode_sentences')
+    print('bert_base_encode_chapters')
     print('data_base_folder: ', data_base_folder)
+    print('model_base_folder: ', model_base_folder)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print('device: %s' % device)
 
@@ -62,18 +62,19 @@ def bert_base_encode_chapters(model_name='bert-base-uncased', dataset='wiki_wins
                 cls_outputs.append(outputs.last_hidden_state[:, 0, :].cpu().detach().numpy())
             cls_output = np.concatenate(cls_outputs, axis=0)
             assert cls_output.shape[0] == int(dataset[-1])
-            np.save(os.path.join(data_folder, 'chap_features.npy'), cls_output)
+            np.save(os.path.join(data_folder, embedding_filename), cls_output)
 
         finish_time = time.time()
         print('finish data_section: %s, time %lf' % (data_section, finish_time - start_time))
 
 
-def bert_base_encode_vocab(model_name, dataset):
-    model_base_folder = '/share/wangyq/.cache/huggingface/transformers/' + model_name
+def bert_base_encode_vocab(model_base_folder, dataset, embedding_filename="embedding"):
     vocab_file = '/share/wangyq/project/HeterSumGraph/cache/' + dataset + '/vocab'
-    embedding_file = '/share/wangyq/project/HeterSumGraph/cache/' + dataset + '/embedding'
+    embedding_file = '/share/wangyq/project/HeterSumGraph/cache/' + dataset + '/' + embedding_filename
     BATCH_SIZE = 32
     VOCAB_SIZE = 100000
+    print('embedding vocab: ', vocab_file)
+    print('model_base_folder: ', model_base_folder)
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print('device: %s' % device)
@@ -116,13 +117,13 @@ def bert_base_encode_vocab(model_name, dataset):
             return
 
 
-def bert_base_encode_sentences(model_name, dataset):
-    model_base_folder = '/share/wangyq/.cache/huggingface/transformers/' + model_name
+def bert_base_encode_sentences(model_base_folder, dataset, embedding_filename='sent_features.npy'):
     graph_base_folder = '/share/wangyq/project/HeterSumGraph/cache/' + dataset + '/features'
     data_base_folder = '/share/wangyq/project/HeterSumGraph/data/' + dataset
 
     print('bert_base_encode_sentences')
     print('data_base_folder: ', data_base_folder)
+    print('model_base_folder: ', model_base_folder)
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print('device: %s' % device)
 
@@ -145,9 +146,8 @@ def bert_base_encode_sentences(model_name, dataset):
             data_folder = os.path.join(graph_base_folder, data_section, str(i))
             if not os.path.exists(data_folder):
                 os.makedirs(data_folder)
-            if 'sent_features.npy' in os.listdir(data_folder):
+            if embedding_filename in os.listdir(data_folder):
                 continue
-            print("missing sent_features: %s, %d" % (data_section, i))
             data_dict = json.loads(line)
 
             cls_outputs = []
@@ -165,13 +165,13 @@ def bert_base_encode_sentences(model_name, dataset):
                 ori_texts = data_dict[text_key]
 
             # batches = [ori_texts[:len(ori_texts)//2], ori_texts[len(ori_texts)//2:]]
-            # batches = [ori_texts[:len(ori_texts)//3], ori_texts[len(ori_texts)//3:len(ori_texts)//3*2], ori_texts[len(ori_texts)//3*2:]]
-            batches = []
-            for i in range(6):
-                if i < 6-1:
-                    batches.append(ori_texts[len(ori_texts)//6*i:len(ori_texts)//6*(i+1)])
-                else:
-                    batches.append(ori_texts[len(ori_texts)//6*i:])
+            batches = [ori_texts[:len(ori_texts)//3], ori_texts[len(ori_texts)//3:len(ori_texts)//3*2], ori_texts[len(ori_texts)//3*2:]]
+            # batches = [ori_texts]
+            # for i in range(6):
+            #     if i < 6-1:
+            #         batches.append(ori_texts[len(ori_texts)//6*i:len(ori_texts)//6*(i+1)])
+            #     else:
+            #         batches.append(ori_texts[len(ori_texts)//6*i:])
             for sequences in batches:
                 # tokenized_sequence = tokenizer(sequences, padding='max_length', truncation=True, max_length=100, return_tensors="pt")
                 tokenized_sequence = tokenizer(sequences, padding='max_length', truncation=True, max_length=70, return_tensors="pt")
@@ -181,21 +181,59 @@ def bert_base_encode_sentences(model_name, dataset):
                 cls_outputs.append(outputs.last_hidden_state[:, 0, :].cpu().detach().numpy())
             cls_output = np.concatenate(cls_outputs, axis=0)
             assert cls_output.shape[0] == len(ori_texts)
-            np.save(os.path.join(data_folder, 'sent_features.npy'), cls_output)
+            np.save(os.path.join(data_folder, embedding_filename), cls_output)
 
         finish_time = time.time()
         print('finish data_section: %s, time %lf' % (data_section, finish_time - start_time))
 
 
-if __name__ == '__main__':
-    # bert_base_encode_vocab('bert-base-uncased', 'wiki_winsize1')
-    # bert_base_encode_vocab('bert-base-uncased', 'wiki_winsize3')
-    # bert_base_encode_vocab('bert-base-uncased', 'wiki_winsize5')
+def delete_feature(dataset, filenames):
+    feature_base_folder = '/share/wangyq/project/HeterSumGraph/cache/' + dataset + '/features'
+    print('removing %s in %s' % (filenames, feature_base_folder))
+    for segment in os.listdir(feature_base_folder):
+        print('removing: %s' % segment)
+        for data_i in os.listdir(os.path.join(feature_base_folder, segment)):
+            feature_names = os.listdir(os.path.join(feature_base_folder, segment, data_i))
+            for filename in filenames:
+                if filename in feature_names:
+                    os.remove(os.path.join(feature_base_folder, segment, data_i, filename))
 
+if __name__ == '__main__':
+    # bert_base_encode_vocab('bert-base-cased', 'wiki_winsize1', embedding_filename='embedding_cased')
+    # bert_base_encode_vocab('bert-base-cased', 'wiki_winsize3', embedding_filename='embedding_cased')
+    # bert_base_encode_vocab('bert-base-cased', 'wiki_winsize5', embedding_filename='embedding_cased')
     # bert_base_encode_sentences('bert-base-chinese', 'qd_winsize1')
-    bert_base_encode_sentences('bert-base-chinese', 'qd_winsize3')
-    bert_base_encode_sentences('bert-base-chinese', 'qd_winsize5')
-    bert_base_encode_sentences('bert-base-uncased', 'wiki_winsize1')
-    bert_base_encode_sentences('bert-base-uncased', 'wiki_winsize3')
-    bert_base_encode_sentences('bert-base-uncased', 'wiki_winsize5')
-    
+    # bert_base_encode_sentences('bert-base-chinese', 'qd_winsize3')
+    # bert_base_encode_sentences('bert-base-chinese', 'qd_winsize5')
+
+    # bert_base_encode_sentences('bert-base-cased', 'wiki_winsize1', embedding_filename='sent_features_cased.npy')
+    # bert_base_encode_sentences('bert-base-cased', 'wiki_winsize3', embedding_filename='sent_features_cased.npy')
+    # bert_base_encode_sentences('bert-base-cased', 'wiki_winsize5', embedding_filename='sent_features_cased.npy')
+    # bert_base_encode_chapters('bert-base-cased', 'wiki_winsize1', embedding_filename='chap_features_cased.npy')
+    # bert_base_encode_chapters('bert-base-cased', 'wiki_winsize3', embedding_filename='chap_features_cased.npy')
+    # bert_base_encode_chapters('bert-base-cased', 'wiki_winsize5', embedding_filename='chap_features_cased.npy')
+
+    bert_base_encode_chapters(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+                              dataset='wiki_winsize3', embedding_filename='chap_features_ft10000.npy')
+    bert_base_encode_vocab(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+                           dataset='wiki_winsize1', embedding_filename='embedding_ft10000')
+    bert_base_encode_vocab(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+                           dataset='wiki_winsize5', embedding_filename='embedding_ft10000')
+    bert_base_encode_sentences(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+                               dataset='wiki_winsize5', embedding_filename='sent_features_ft10000.npy')
+
+    # bert_base_encode_vocab(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+    #                        dataset='wiki_winsize3', embedding_filename='embedding_ft10000')
+    # bert_base_encode_sentences(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+    #                            dataset='wiki_winsize3', embedding_filename='sent_features_ft10000.npy')
+    # bert_base_encode_sentences(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+    #                            dataset='wiki_winsize1', embedding_filename='sent_features_ft10000.npy')
+    # bert_base_encode_chapters(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+    #                           dataset='wiki_winsize1', embedding_filename='chap_features_ft10000.npy')
+    # bert_base_encode_chapters(model_base_folder='/share/wangyq/.cache/huggingface/transformers/bert-base-uncased-wikihow-finetune/checkpoint-10000',
+    #                           dataset='wiki_winsize5', embedding_filename='chap_features_ft10000.npy')
+
+    # delete_feature(dataset='wiki_winsize1', filenames=['chap_features_ft100000.npy', 'sent_features_ft100000.npy', 'chap_features_ft50000.npy', 'chap_features_ft150000.npy', 'sent_features_ft50000.npy', 'sent_features_ft150000.npy', 'chap_features_cased.npy', 'sent_features_cased.npy'])
+    # delete_feature(dataset='wiki_winsize3', filenames=['chap_features_ft100000.npy', 'sent_features_ft100000.npy', 'chap_features_ft50000.npy', 'chap_features_ft150000.npy', 'sent_features_ft50000.npy', 'sent_features_ft150000.npy', 'chap_features_cased.npy', 'sent_features_cased.npy'])
+    # delete_feature(dataset='wiki_winsize5', filenames=['chap_features_ft100000.npy', 'sent_features_ft100000.npy', 'chap_features_ft50000.npy', 'chap_features_ft150000.npy', 'sent_features_ft50000.npy', 'sent_features_ft150000.npy', 'chap_features_cased.npy', 'sent_features_cased.npy'])
+    print('bert embedding finish!')

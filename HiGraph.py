@@ -17,6 +17,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import sys
 import time
 import numpy as np
 
@@ -26,6 +27,7 @@ import torch.nn as nn
 import torch.nn.utils.rnn as rnn
 
 import dgl
+import dgl.function as fn
 
 # from module.GAT import GAT, GAT_ffn
 from module.Encoder import sentEncoder
@@ -245,27 +247,19 @@ class HSumDocGraph(HSumGraph):
     def set_dnfeature(self, graph):
         """ init doc node by mean pooling on the its sent node (connected by the edges with type=1) """
         dnode_id = graph.filter_nodes(lambda nodes: nodes.data["dtype"] == 2)
-        node_feature_list = []
-        snid2dnid = {}
-        for i, dnode in enumerate(dnode_id):
-            snodes = [nid for nid in graph.predecessors(dnode) if graph.nodes[nid].data["dtype"]==1]
-            doc_feature = graph.nodes[snodes].data["init_feature"].mean(dim=0)
-            try:
-                assert not torch.any(torch.isnan(doc_feature)), "doc_feature_element"
-            except AssertionError as ae:
-                # if doc feature is nan, init as 0
-                logger.error('So init node_feature %d to 0.' % i)
-                doc_feature.zero_()
-                logger.error('in except: doc_feature.device = %s, dnode = ' % str(doc_feature.device))
-                print(dnode)
+        edges_sc = graph.filter_edges(lambda edges: edges.src['dtype'] == 1)
+        edges_sc = graph.filter_edges(lambda edges: edges.dst['dtype'] == 2, edges=edges_sc)
+        src_nodes, dest_nodes = graph.edges()
+        sent_nodes, chap_nodes = src_nodes[edges_sc].tolist(), dest_nodes[edges_sc].tolist()
 
-            node_feature_list.append(doc_feature)
-            for s in snodes:
-                snid2dnid[int(s)] = dnode
-
-        node_feature = torch.stack(node_feature_list)
+        sent_chap_subgraph = dgl.graph((sent_nodes, chap_nodes), num_nodes=graph.number_of_nodes())
+        if self._hps.cuda:
+            sent_chap_subgraph = sent_chap_subgraph.to(torch.device("cuda:0"))
+        sent_chap_subgraph.ndata['init_feature'] = graph.ndata['init_feature']
+        sent_chap_subgraph.update_all(fn.copy_u("init_feature", "m"), fn.mean("m", "chap_init_feature"))
+        node_feature = sent_chap_subgraph.ndata['chap_init_feature'][dnode_id]
+        snid2dnid = dict(zip(sent_nodes, chap_nodes))
         return node_feature, snid2dnid
-
 
 def get_snode_feat(G, feat):
     glist = dgl.unbatch(G)

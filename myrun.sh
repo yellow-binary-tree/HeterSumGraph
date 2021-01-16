@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 # run this script like:
-# nohup bash myrun.sh run HDSG wiki_winsize5 5 10 true "use-bert-baseline" 6 > wiki5_bert.log 2>&1 &
-# nohup bash myrun.sh run HDSG wiki_winsize5 5 10 false "no-bert-baseline-hidden256" 6 > wiki5_hidden256.log 2>&1 &
+# nohup bash myrun.sh run HDSG wiki_winsize3 3 10 true "bert-baseline-batch64-hidden128-bertft150000" 7 > wiki3_bert-batch64-hidden128-bertft150000.log 2>&1 &
+# nohup bash myrun.sh run HDSG wiki_winsize5 5 10 false "no-bert-baseline-hidden128-batch64" 4 > wiki5_batch64-hidden128.log 2>&1 &
+# nohup bash myrun.sh run HDSG wiki_winsize3 3 10 true "bert-baseline-batch64-hidden128-bertft10000" 0 > wiki3_bert-batch64-hidden128-bertft10000.log 2>&1 &
+
 
 export LD_LIBRARY_PATH=/opt/cuda-10.0/lib64:$LD_LIBRARY_PATH;
 
@@ -37,7 +39,7 @@ eval_iter=$(( 151472/3/$batch_size ))  # eval 3 times per epoch
 mmm=5
 if [[ $dataset == *"wiki_"* ]]; then
     embedding_path="/share/wangyq/resources/glove.6B.200d.txt"
-    batch_size=32
+    batch_size=64
     eval_iter=$(( 38896/2/$batch_size ))  # eval 2 times per epoch
     mmm=1
 fi
@@ -45,17 +47,17 @@ fi
 word_emb_dim=200
 if [[ $use_bert_embedding == 'true' ]]; then
     word_emb_dim=768
-    embedding_path="/share/wangyq/project/HeterSumGraph/cache/$dataset/embedding"
+    embedding_path="/share/wangyq/project/HeterSumGraph/cache/$dataset/embedding_ft10000"
 fi
 
-hidden_size=256
+hidden_size=128
 
 time=$(date "+%Y%m%d_%H%M%S")
 
 if [ $mode == 'debug' ]; then
     echo 'run.sh: train in debug mode '$model $dataset $winsize $gpu
-    CUDA_LAUNCH_BLOCKING=1 python -u train.py \
-        --model $model --use_bert_embedding $use_bert_embedding \
+        # --model $model --use_bert_embedding $use_bert_embedding \
+    CUDA_LAUNCH_BLOCKING=1 python -u train.py --model $model --use_bert_embedding $use_bert_embedding \
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --save_root save/$time --log_root log \
@@ -65,11 +67,12 @@ if [ $mode == 'debug' ]; then
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
         --lr_descent --grad_clip -m $mmm --eval_after_iterations 100 \
         --cuda --gpu $gpu
+
 elif [ $mode == 'run' ]; then
     echo 'run.sh: train '$model $dataset $winsize $gpu
         # --model $model --use_bert_embedding $use_bert_embedding \
-    python -u train.py --model $model \
-        --exp_name myHeterSumGraph_${model}_${dataset}_use-bert-embedding_${use_bert_embedding}_${message} \
+    python -u train.py --model $model --use_bert_embedding $use_bert_embedding\
+        --exp_name myHeterSumGraph_${model}_${dataset}_${message} \
         --data_dir /share/wangyq/project/HeterSumGraph/data/$dataset \
         --cache_dir /share/wangyq/project/HeterSumGraph/cache/$dataset \
         --log_root log --save_root save/$time \
@@ -78,7 +81,7 @@ elif [ $mode == 'run' ]; then
         --n_feature_size $hidden_size --lstm_hidden_state $hidden_size \
         --sent_max_len 50 --doc_max_timesteps $doc_max_timesteps \
         --lr_descent --grad_clip -m $mmm --eval_after_iterations $eval_iter \
-        --cuda --gpu $gpu
+        --cuda --gpu $gpu --bert_finetune "_ft10000"
         # --save_root save/20210109_174225 --restore_model iter_4860 \
         # --save_root save/20201225_230027 --restore_model iter_56790 --start_iteration 56790 \
 

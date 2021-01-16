@@ -125,9 +125,9 @@ class ExampleSet():
 
         if self.hps.use_bert_embedding:
             # load sent and chap features
-            sent_features = np.load(os.path.join(self.hps.cache_dir, 'features', 'train' + str(self.folder_i), str(self.graph_i), 'sent_features.npy'))
+            sent_features = np.load(os.path.join(self.hps.cache_dir, 'features', 'train' + str(self.folder_i), str(self.graph_i), 'sent_features' + self.hps.bert_finetune + '.npy'))
             sent_features = torch.FloatTensor(sent_features)
-            chap_features = np.load(os.path.join(self.hps.cache_dir, 'features', 'train' + str(self.folder_i), str(self.graph_i), 'chap_features.npy'))
+            chap_features = np.load(os.path.join(self.hps.cache_dir, 'features', 'train' + str(self.folder_i), str(self.graph_i), 'chap_features' + self.hps.bert_finetune + '.npy'))
             chap_features = torch.FloatTensor(chap_features)
         else:
             sent_features, chap_features = None, None
@@ -186,9 +186,9 @@ class MapDataset(torch.utils.data.Dataset):
             
             if self.hps.use_bert_embedding:
                 # load sent and chap features
-                sent_features = np.load(os.path.join(self.hps.cache_dir, 'features', self.mode, str(index), 'sent_features.npy'))
+                sent_features = np.load(os.path.join(self.hps.cache_dir, 'features', self.mode, str(index), 'sent_features' + self.hps.bert_finetune + '.npy'))
                 sent_features = torch.FloatTensor(sent_features)
-                chap_features = np.load(os.path.join(self.hps.cache_dir, 'features', self.mode, str(index), 'chap_features.npy'))
+                chap_features = np.load(os.path.join(self.hps.cache_dir, 'features', self.mode, str(index), 'chap_features' + self.hps.bert_finetune + '.npy'))
                 chap_features = torch.FloatTensor(chap_features)
             else:
                 sent_features, chap_features = None, None

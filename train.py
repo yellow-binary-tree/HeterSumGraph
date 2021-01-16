@@ -350,6 +350,7 @@ def main():
     parser.add_argument('--cache_dir', type=str, default='cache/CNNDM', help='The processed dataset directory')
     parser.add_argument('--embedding_path', type=str, default='/remote-home/dqwang/Glove/glove.42B.300d.txt', help='Path expression to external word embedding.')
     parser.add_argument('--use_bert_embedding', type=bool, default=False, help='use bert for init instead of lstm & cnn')
+    parser.add_argument('--bert_finetune', type=str, default='', help='BERT finetune')
 
     # Important settings
     parser.add_argument('--model', type=str, default='HSG', help='model structure[HSG|HDSG]')
@@ -361,8 +362,8 @@ def main():
     parser.add_argument('--log_root', type=str, default='log/', help='Root directory for all logging.')
 
     # Hyperparameters
-    parser.add_argument('--train_num_workers', type=int, default=8, help='num of workers of DataLoader. [default: 4]')
-    parser.add_argument('--eval_num_workers', type=int, default=8, help='num of workers of DataLoader. [default: 4]')
+    parser.add_argument('--train_num_workers', type=int, default=16, help='num of workers of DataLoader. [default: 4]')
+    parser.add_argument('--eval_num_workers', type=int, default=16, help='num of workers of DataLoader. [default: 4]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU ID to use. [default: 0]')
     parser.add_argument('--cuda', action='store_true', default=False, help='GPU or CPU [default: False]')
     parser.add_argument('--vocab_size', type=int, default=50000, help='Size of vocabulary. [default: 50000]')
